@@ -13,13 +13,17 @@ import (
 	"npm-operator/controllers"
 )
 
-var (
-	scheme = runtime.NewScheme()
-)
+var scheme = runtime.NewScheme()
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(v1alpha1.AddToScheme(scheme))
+
+	// MANUAL REGISTRATION (NO AddToScheme NEEDED)
+	scheme.AddKnownTypes(
+		v1alpha1.GroupVersion,
+		&v1alpha1.NpmApp{},
+		&v1alpha1.NpmAppList{},
+	)
 }
 
 func main() {

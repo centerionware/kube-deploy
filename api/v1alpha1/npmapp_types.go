@@ -1,18 +1,11 @@
 package v1alpha1
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var GroupVersion = schema.GroupVersion{
-	Group:   "npm.centerionware.app",
-	Version: "v1alpha1",
-}
-
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
+// ---------------- ROOT TYPES ----------------
 
 type NpmApp struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -22,25 +15,13 @@ type NpmApp struct {
 	Status NpmAppStatus `json:"status,omitempty"`
 }
 
-func (in *NpmApp) DeepCopyObject() runtime.Object {
-	out := new(NpmApp)
-	*out = *in
-	return out
-}
-
-// +kubebuilder:object:root=true
-
 type NpmAppList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []NpmApp `json:"items"`
 }
 
-func (in *NpmAppList) DeepCopyObject() runtime.Object {
-	out := new(NpmAppList)
-	*out = *in
-	return out
-}
+// ---------------- SPEC ----------------
 
 type NpmAppSpec struct {
 	Repo string `json:"repo"`
@@ -75,12 +56,22 @@ type NpmServiceSpec struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
+// ---------------- STATUS ----------------
+
 type NpmAppStatus struct {
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
-	Phase string `json:"phase,omitempty"`
-	Commit string `json:"commit,omitempty"`
-	Image string `json:"image,omitempty"`
-	ImageDigest string `json:"imageDigest,omitempty"`
+	Phase         string `json:"phase,omitempty"`
+	Image         string `json:"image,omitempty"`
+	Commit        string `json:"commit,omitempty"`
 	LastGoodImage string `json:"lastGoodImage,omitempty"`
-	JobName string `json:"jobName,omitempty"`
+}
+
+// ---------------- MANUAL SCHEME HOOK ----------------
+
+func AddKnownTypes(s *runtime.Scheme) error {
+	s.AddKnownTypes(
+		GroupVersion,
+		&NpmApp{},
+		&NpmAppList{},
+	)
+	return nil
 }
