@@ -2,81 +2,89 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	v1 "npm-operator/api/v1alpha1"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	defaultGitRevision = "main"
+	localRegistry      = "registry.registry.svc.cluster.local:5000"
 )
 
 func ensureKpackImage(ctx context.Context, c client.Client, app v1.NpmApp) error {
 
-	image := &unstructured.Unstructured{}
-	image.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "kpack.io",
-		Version: "v1alpha2",
-		Kind:    "Image",
-	})
+	imageName := fmt.Sprintf("%s/%s:latest", localRegistry, app.Name)
+	gitRevision := defaultGitRevision
 
-	image.SetName(app.Name)
-	image.SetNamespace(app.Namespace)
+	img := &unstructured.Unstructured{}
+	img.SetAPIVersion("kpack.io/v1alpha2")
+	img.SetKind("Image")
 
-	image.SetOwnerReferences([]metav1.OwnerReference{
-		{
-			APIVersion: app.APIVersion,
-			Kind:       app.Kind,
-			Name:       app.Name,
-			UID:        app.UID,
-			Controller: boolPtr(true),
+	key := types.NamespacedName{
+		Name:      app.Name,
+		Namespace: app.Namespace,
+	}
+
+	err := c.Get(ctx, key, img)
+	if err == nil {
+		return nil
+	}
+
+	// create new kpack image
+	img.Object = map[string]interface{}{
+		"apiVersion": "kpack.io/v1alpha2",
+		"kind":       "Image",
+		"metadata": map[string]interface{}{
+			"name":      app.Name,
+			"namespace": app.Namespace,
 		},
-	})
-
-	image.Object["spec"] = map[string]interface{}{
-		"tag": app.Spec.Image,
-		"source": map[string]interface{}{
-			"git": map[string]interface{}{
-				"url":      app.Spec.Repo,
-				"revision": app.Spec.Revision,
+		"spec": map[string]interface{}{
+			"tag": imageName,
+			"builder": map[string]interface{}{
+				"name": "default-builder",
+				"kind": "ClusterBuilder",
+			},
+			"source": map[string]interface{}{
+				"git": map[string]interface{}{
+					"url":      app.Spec.Repo,
+					"revision": gitRevision,
+				},
 			},
 		},
 	}
 
-	return c.Patch(ctx, image, client.Apply, client.ForceOwnership, client.FieldOwner("npm-operator"))
+	return c.Create(ctx, img)
 }
 
 func getLatestImageDigest(ctx context.Context, c client.Client, app v1.NpmApp) (string, error) {
 
-	image := &unstructured.Unstructured{}
-	image.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "kpack.io",
-		Version: "v1alpha2",
-		Kind:    "Image",
-	})
+	img := &unstructured.Unstructured{}
+	img.SetAPIVersion("kpack.io/v1alpha2")
+	img.SetKind("Image")
 
-	err := c.Get(ctx, client.ObjectKey{
+	err := c.Get(ctx, types.NamespacedName{
 		Name:      app.Name,
 		Namespace: app.Namespace,
-	}, image)
+	}, img)
 
 	if err != nil {
 		return "", err
 	}
 
-	status, found, _ := unstructured.NestedMap(image.Object, "status")
+	status, found, _ := unstructured.NestedMap(img.Object, "status", "latestImage")
 	if !found {
 		return "", nil
 	}
 
-	latest, found, _ := unstructured.NestedString(status, "latestImage")
+	image, found, _ := unstructured.NestedString(status, "image")
 	if !found {
 		return "", nil
 	}
 
-	return latest, nil
-}
-
-func boolPtr(b bool) *bool {
-	return &b
+	return image, nil
 }
