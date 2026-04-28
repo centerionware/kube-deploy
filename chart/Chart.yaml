@@ -1,0 +1,6 @@
+apiVersion: v2
+name: npm-operator
+description: Lightweight NPM app platform operator with kpack + NetBird integration
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

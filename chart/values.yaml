@@ -1,0 +1,30 @@
+image:
+  repository: ghcr.io/centerionware/kube-nb-qd
+  tag: latest
+  pullPolicy: Always
+
+namespace: npm-deployer
+
+serviceAccount:
+  name: npm-operator
+
+resources:
+  cpu: 100m
+  memory: 128Mi
+
+defaults:
+
+  build:
+    installCommand: "pnpm install"
+    buildCommand: "pnpm build"
+
+  run:
+    command: "pnpm start"
+    port: 3000
+
+  service:
+    annotations:
+      netbird.io/expose: "true"
+      netbird.io/groups: "media"
+      netbird.io/policy: "media"
+      netbird.io/sourceGroups: "Media-access"

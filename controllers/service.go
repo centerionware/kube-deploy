@@ -8,7 +8,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/api/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -19,7 +19,7 @@ func ensureService(ctx context.Context, c client.Client, app v1.NpmApp) error {
 	var svc corev1.Service
 
 	err := c.Get(ctx, types.NamespacedName{
-		Name:      app.Name,
+		Name:      app.Spec.Service.Name,
 		Namespace: app.Namespace,
 	}, &svc)
 
@@ -29,7 +29,7 @@ func ensureService(ctx context.Context, c client.Client, app v1.NpmApp) error {
 
 		svc = corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:        app.Name,
+				Name:        app.Spec.Service.Name,
 				Namespace:   app.Namespace,
 				Annotations: desiredAnnotations,
 				OwnerReferences: []metav1.OwnerReference{

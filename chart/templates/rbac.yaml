@@ -1,0 +1,38 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: npm-operator
+
+rules:
+  - apiGroups: ["npm.centerionware.app"]
+    resources: ["npmapps", "npmapps/status"]
+    verbs: ["*"]
+
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["*"]
+
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["*"]
+
+  - apiGroups: ["kpack.io"]
+    resources: ["images"]
+    verbs: ["*"]
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: npm-operator
+
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: npm-operator
+
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.serviceAccount.name }}
+    namespace: {{ .Values.namespace }}

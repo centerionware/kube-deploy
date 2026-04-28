@@ -16,6 +16,31 @@ type NpmAppReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+func mergeMap(user, defaults map[string]string) map[string]string {
+	if user == nil {
+		return defaults
+	}
+
+	out := map[string]string{}
+
+	for k, v := range defaults {
+		out[k] = v
+	}
+
+	for k, v := range user {
+		out[k] = v
+	}
+
+	return out
+}
+
+func mergeString(userVal, defaultVal string) string {
+	if userVal != "" {
+		return userVal
+	}
+	return defaultVal
+}
+
 func (r *NpmAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 
 	l := log.FromContext(ctx)
