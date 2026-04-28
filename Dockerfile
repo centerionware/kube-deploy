@@ -1,18 +1,19 @@
-FROM golang:1.23-alpine AS builder
+# Build stage
+FROM golang:1.25-alpine AS builder
 WORKDIR /app
 
+# Copy everything first
 COPY . .
 
-# Init module if not present (safe)
-RUN apk add --no-cache ca-certificates git
+# Generate go.sum and download all dependencies
 RUN go mod tidy
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o app
+# Build the binary
+RUN go build -o evmon ./cmd/main.go
 
-
-# ---------- Final ----------
-FROM scratch
-COPY --from=builder /app/app /app
-# copy CA certs
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-ENTRYPOINT ["/app"]
+# Final stage
+FROM alpine:3.18
+WORKDIR /app
+COPY --from=builder /app/evmon .
+EXPOSE 8080
+CMD ["./evmon"]

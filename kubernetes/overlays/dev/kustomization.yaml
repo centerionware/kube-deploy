@@ -1,0 +1,9 @@
+resources:
+  - ../../base/
+
+nameSuffix: -dev
+
+namespace: evmon   # <-- inject namespace into all resources
+
+patchesStrategicMerge:
+  - patch.yaml
