@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -26,7 +27,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := mgr.Start(manager.SetupSignalHandler()); err != nil {
+	// FIX: correct signal handler for v0.17+
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		os.Exit(1)
 	}
 }
