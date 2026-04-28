@@ -1,19 +1,21 @@
 package controllers
 
 import (
+	"context"
+
 	v1 "npm-operator/api/v1alpha1"
 
-	core "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"context"
 )
 
 func ensureService(ctx context.Context, c client.Client, app v1.NpmApp) error {
 
-	var svc core.Service
+	var svc corev1.Service
 
 	err := c.Get(ctx, types.NamespacedName{
 		Name:      app.Name,
@@ -22,20 +24,20 @@ func ensureService(ctx context.Context, c client.Client, app v1.NpmApp) error {
 
 	if errors.IsNotFound(err) {
 
-		svc = core.Service{
+		svc = corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      app.Name,
 				Namespace: app.Namespace,
 			},
-			Spec: core.ServiceSpec{
+			Spec: corev1.ServiceSpec{
 				Selector: map[string]string{"app": app.Name},
-				Ports: []core.ServicePort{
+				Ports: []corev1.ServicePort{
 					{
 						Port:       80,
 						TargetPort: intstr.FromInt(app.Spec.Run.Port),
 					},
 				},
-				Type: core.ServiceTypeClusterIP,
+				Type: corev1.ServiceTypeClusterIP,
 			},
 		}
 

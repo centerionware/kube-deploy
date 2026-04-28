@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"context"
+
 	v1 "npm-operator/api/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

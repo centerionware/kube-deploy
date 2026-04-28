@@ -1,14 +1,26 @@
 package v1alpha1
 
-import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+)
 
-// NpmApp is your platform CRD
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+
 type NpmApp struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec   NpmAppSpec   `json:"spec"`
 	Status NpmAppStatus `json:"status,omitempty"`
+}
+
+// REQUIRED: makes it a proper Kubernetes object
+func (in *NpmApp) DeepCopyObject() runtime.Object {
+	out := new(NpmApp)
+	*out = *in
+	return out
 }
 
 type NpmAppSpec struct {
@@ -33,9 +45,8 @@ type NpmRunSpec struct {
 	Port    int    `json:"port,omitempty"`
 }
 
-// Status is what makes this production-grade
 type NpmAppStatus struct {
 	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
 	Image              string `json:"image,omitempty"`
-	Phase              string `json:"phase,omitempty"` // Pending / Building / Ready / Failed
+	Phase              string `json:"phase,omitempty"`
 }

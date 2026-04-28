@@ -7,9 +7,7 @@ import (
 
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -29,59 +27,26 @@ func (r *NpmAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// ----------------------------------------
-	// FINALIZER (safe cleanup hook)
-	// ----------------------------------------
-	if app.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !containsFinalizer(app.Finalizers, "npm.finalizers.centerionware.app") {
-			app.Finalizers = append(app.Finalizers, "npm.finalizers.centerionware.app")
-			_ = r.Update(ctx, &app)
-			return ctrl.Result{}, nil
-		}
-	} else {
-		// cleanup logic could go here
-		return ctrl.Result{}, nil
-	}
+	// Ensure kpack image
+	image := ensureKpackImage(ctx, r.Client, app)
 
-	// ----------------------------------------
-	// 1. Ensure kpack Image
-	// ----------------------------------------
-	imageName := ensureKpackImage(ctx, r.Client, app)
-
-	// ----------------------------------------
-	// 2. Deployment
-	// ----------------------------------------
-	err := ensureDeployment(ctx, r.Client, app, imageName)
-	if err != nil {
+	// Deployment
+	if err := ensureDeployment(ctx, r.Client, app, image); err != nil {
 		l.Error(err, "deployment failed")
 		return ctrl.Result{}, err
 	}
 
-	// ----------------------------------------
-	// 3. Service
-	// ----------------------------------------
-	err = ensureService(ctx, r.Client, app)
-	if err != nil {
+	// Service
+	if err := ensureService(ctx, r.Client, app); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// ----------------------------------------
-	// STATUS UPDATE
-	// ----------------------------------------
-	app.Status.Image = imageName
+	// Status update
+	app.Status.Image = image
 	app.Status.Phase = "Ready"
 	app.Status.ObservedGeneration = app.Generation
 
 	_ = r.Status().Update(ctx, &app)
 
 	return ctrl.Result{}, nil
-}
-
-func containsFinalizer(list []string, f string) bool {
-	for _, v := range list {
-		if v == f {
-			return true
-		}
-	}
-	return false
 }
