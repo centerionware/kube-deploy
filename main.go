@@ -28,7 +28,11 @@ func main() {
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 	utilruntime.Must(corev1.AddToScheme(scheme))
 
-	scheme.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.NpmApp{})
+    scheme.AddKnownTypes(
+    	v1alpha1.GroupVersion,
+    	&v1alpha1.NpmApp{},
+    	&v1alpha1.NpmAppList{},
+    )
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,

@@ -18,7 +18,7 @@ type NpmApp struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   NpmAppSpec   `json:"spec"`
+	Spec   NpmAppSpec   `json:"spec,omitempty"`
 	Status NpmAppStatus `json:"status,omitempty"`
 }
 
@@ -28,17 +28,29 @@ func (in *NpmApp) DeepCopyObject() runtime.Object {
 	return out
 }
 
+// +kubebuilder:object:root=true
+
+type NpmAppList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []NpmApp `json:"items"`
+}
+
+func (in *NpmAppList) DeepCopyObject() runtime.Object {
+	out := new(NpmAppList)
+	*out = *in
+	return out
+}
+
 type NpmAppSpec struct {
-	Repo     string `json:"repo"`
-	Revision string `json:"revision,omitempty"`
-	Image    string `json:"image"`
+	Repo string `json:"repo"`
 
 	Build NpmBuildSpec `json:"build,omitempty"`
 	Run   NpmRunSpec   `json:"run,omitempty"`
 
-	Env map[string]string `json:"env,omitempty"`
-
 	Service NpmServiceSpec `json:"service,omitempty"`
+
+	Env map[string]string `json:"env,omitempty"`
 }
 
 type NpmServiceSpec struct {
@@ -46,7 +58,6 @@ type NpmServiceSpec struct {
 }
 
 type NpmBuildSpec struct {
-	Builder        string `json:"builder,omitempty"`
 	InstallCommand string `json:"installCommand,omitempty"`
 	BuildCommand   string `json:"buildCommand,omitempty"`
 }
