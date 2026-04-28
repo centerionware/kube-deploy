@@ -4,17 +4,31 @@ import (
 	"os"
 
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+
+	"npm-operator/api/v1alpha1"
 	"npm-operator/controllers"
 )
 
+var (
+	scheme = runtime.NewScheme()
+)
+
+func init() {
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(v1alpha1.AddToScheme(scheme))
+}
+
 func main() {
 
-	cfg := config.GetConfigOrDie()
+	ctrl.SetLogger(ctrl.Log.WithName("npm-operator"))
 
-	mgr, err := manager.New(cfg, manager.Options{})
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme: scheme,
+	})
 	if err != nil {
 		os.Exit(1)
 	}
@@ -27,7 +41,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// FIX: correct signal handler for v0.17+
+	ctrl.Log.Info("starting manager")
+
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		os.Exit(1)
 	}
