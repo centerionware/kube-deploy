@@ -13,11 +13,14 @@ resources:
   memory: 128Mi
 
 defaults:
-
   build:
+    baseImage: node:20-alpine
     installCommand: "pnpm install"
     buildCommand: "pnpm build"
-
+    registry:
+      url: registry.registry.svc.cluster.local:5000
+      repository: apps
+      secretRef: ""
   run:
     command: "pnpm start"
     port: 3000

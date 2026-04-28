@@ -45,26 +45,34 @@ func (in *NpmAppList) DeepCopyObject() runtime.Object {
 type NpmAppSpec struct {
 	Repo string `json:"repo"`
 
-	Build NpmBuildSpec `json:"build,omitempty"`
-	Run   NpmRunSpec   `json:"run,omitempty"`
-
+	Build   NpmBuildSpec   `json:"build,omitempty"`
+	Run     NpmRunSpec     `json:"run,omitempty"`
 	Service NpmServiceSpec `json:"service,omitempty"`
 
 	Env map[string]string `json:"env,omitempty"`
 }
 
-type NpmServiceSpec struct {
-	Annotations map[string]string `json:"annotations,omitempty"`
-}
-
 type NpmBuildSpec struct {
+	BaseImage     string `json:"baseImage,omitempty"`
 	InstallCommand string `json:"installCommand,omitempty"`
 	BuildCommand   string `json:"buildCommand,omitempty"`
+
+	Registry RegistrySpec `json:"registry,omitempty"`
+}
+
+type RegistrySpec struct {
+	URL        string `json:"url,omitempty"`
+	Repository string `json:"repository,omitempty"`
+	SecretRef  string `json:"secretRef,omitempty"`
 }
 
 type NpmRunSpec struct {
 	Command string `json:"command,omitempty"`
 	Port    int    `json:"port,omitempty"`
+}
+
+type NpmServiceSpec struct {
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 type NpmAppStatus struct {
