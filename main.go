@@ -17,13 +17,7 @@ var scheme = runtime.NewScheme()
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-	// MANUAL REGISTRATION (NO AddToScheme NEEDED)
-	scheme.AddKnownTypes(
-		v1alpha1.GroupVersion,
-		&v1alpha1.NpmApp{},
-		&v1alpha1.NpmAppList{},
-	)
+	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 }
 
 func main() {
@@ -44,8 +38,6 @@ func main() {
 	if err := controllers.SetupWithManager(mgr, reconciler); err != nil {
 		os.Exit(1)
 	}
-
-	ctrl.Log.Info("starting manager")
 
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		os.Exit(1)
