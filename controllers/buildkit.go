@@ -18,12 +18,11 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.NpmApp) (string, 
 		return "", false, err
 	}
 
-	// already built
 	if app.Status.Commit == commit && app.Status.Phase == "Ready" {
 		return app.Status.Image, true, nil
 	}
 
-	image := fmt.Sprintf("%s:%s", resolveImage(*app), commit[:7])
+	image := resolveImage(*app, commit)
 	jobName := fmt.Sprintf("%s-build-%s", app.Name, commit[:7])
 
 	var job batchv1.Job
@@ -33,8 +32,7 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.NpmApp) (string, 
 	}, &job)
 
 	if err != nil {
-		// create job
-		if err := c.Create(ctx, &buildJob(app, jobName, image)); err != nil {
+		if err := ensureBuildJob(ctx, c, app, jobName, image); err != nil {
 			return "", false, err
 		}
 
@@ -42,7 +40,6 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.NpmApp) (string, 
 		return "", false, nil
 	}
 
-	// check job status
 	if job.Status.Succeeded > 0 {
 		updateStatus(ctx, c, app, "Ready", commit, image)
 		return image, true, nil
@@ -53,8 +50,15 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.NpmApp) (string, 
 		return "", false, fmt.Errorf("build failed")
 	}
 
-	// still building
 	return "", false, nil
+}
+
+func resolveImage(app v1.NpmApp, commit string) string {
+	base := app.Spec.Build.Output
+	if base == "" {
+		base = "registry.local/" + app.Name
+	}
+	return fmt.Sprintf("%s:%s", base, commit[:7])
 }
 
 func updateStatus(ctx context.Context, c client.Client, app *v1.NpmApp, phase, commit, image string) {
@@ -62,6 +66,5 @@ func updateStatus(ctx context.Context, c client.Client, app *v1.NpmApp, phase, c
 	app.Status.Commit = commit
 	app.Status.Image = image
 	app.Status.LastUpdate = time.Now().Format(time.RFC3339)
-
 	_ = c.Status().Update(ctx, app)
 }

@@ -15,6 +15,6 @@ func buildEnv(env map[string]string) []corev1.EnvVar {
 	return out
 }
 
-func must(v string) corev1.ResourceQuantity {
+func must(v string) resource.Quantity {
 	return resource.MustParse(v)
 }

@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"fmt"
-	"strings"
 
 	v1 "npm-operator/api/v1alpha1"
 
@@ -10,12 +9,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
 func ensureBuildJob(ctx context.Context, c client.Client, app *v1.NpmApp, name string, image string) error {
-
 	job := buildJob(app, name, image)
-
 	return c.Create(ctx, &job)
 }
+
 func buildJob(app *v1.NpmApp, name string, image string) batchv1.Job {
 
 	dockerfile := generateDockerfile(*app)
