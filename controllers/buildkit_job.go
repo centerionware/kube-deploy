@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"fmt"
 
 	v1 "npm-operator/api/v1alpha1"
@@ -8,6 +9,8 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func ensureBuildJob(ctx context.Context, c client.Client, app *v1.NpmApp, name string, image string) error {
