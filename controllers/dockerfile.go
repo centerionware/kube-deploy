@@ -1,42 +1,34 @@
 package controllers
 
 import (
-	"fmt"
 	v1 "npm-operator/api/v1alpha1"
 )
 
 func generateDockerfile(app v1.NpmApp) string {
 
-	base := app.Spec.Build.BaseImage
-	if base == "" {
-		base = "node:20-alpine"
+	build := app.Spec.Build
+
+	base := "node:20-alpine"
+	if build.BaseImage != "" {
+		base = build.BaseImage
 	}
 
-	install := app.Spec.Build.InstallCommand
-	if install == "" {
-		install = "pnpm install"
+	install := "pnpm install"
+	if build.InstallCommand != "" {
+		install = build.InstallCommand
 	}
 
-	build := app.Spec.Build.BuildCommand
-	if build == "" {
-		build = "pnpm build"
+	buildCmd := "pnpm build"
+	if build.BuildCommand != "" {
+		buildCmd = build.BuildCommand
 	}
 
-	return fmt.Sprintf(`
-FROM %s
-
+	return `
+FROM ` + base + `
 WORKDIR /app
-
-RUN apk add --no-cache git
-RUN npm install -g pnpm
-
-RUN git clone %s .
-
-RUN %s
-RUN %s
-
-EXPOSE %d
-
-CMD ["pnpm", "start"]
-`, base, app.Spec.Repo, install, build, resolvePort(app))
+COPY . .
+RUN ` + install + `
+RUN ` + buildCmd + `
+CMD ` + formatCmd(app.Spec.Run.Command) + `
+`
 }

@@ -7,7 +7,6 @@ import (
 )
 
 func SetupWithManager(mgr ctrl.Manager, r *NpmAppReconciler) error {
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.NpmApp{}).
 		Complete(r)

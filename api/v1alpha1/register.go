@@ -9,6 +9,5 @@ func AddToScheme(s *runtime.Scheme) error {
 		&NpmApp{},
 		&NpmAppList{},
 	)
-
 	return nil
 }

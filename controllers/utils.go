@@ -7,7 +7,3 @@ func boolPtr(b bool) *bool {
 func resolvePort(app interface{}) int {
 	return 3000
 }
-
-func ptrInt32(i int32) *int32 {
-	return &i
-}
