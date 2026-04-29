@@ -1,34 +1,41 @@
 package controllers
 
 import (
+	"strings"
+
 	v1 "npm-operator/api/v1alpha1"
 )
 
 func generateDockerfile(app v1.NpmApp) string {
 
-	build := app.Spec.Build
-
 	base := "node:20-alpine"
-	if build.BaseImage != "" {
-		base = build.BaseImage
+	if app.Spec.Build.BaseImage != "" {
+		base = app.Spec.Build.BaseImage
 	}
 
 	install := "pnpm install"
-	if build.InstallCommand != "" {
-		install = build.InstallCommand
+	if app.Spec.Build.InstallCmd != "" {
+		install = app.Spec.Build.InstallCmd
 	}
 
-	buildCmd := "pnpm build"
-	if build.BuildCommand != "" {
-		buildCmd = build.BuildCommand
+	build := "pnpm build"
+	if app.Spec.Build.BuildCmd != "" {
+		build = app.Spec.Build.BuildCmd
 	}
 
-	return `
+	cmd := formatCmd(app.Spec.Run.Command)
+	if cmd == "" {
+		cmd = `["node","server.js"]`
+	}
+
+	return strings.TrimSpace(`
 FROM ` + base + `
 WORKDIR /app
 COPY . .
+
 RUN ` + install + `
-RUN ` + buildCmd + `
-CMD ` + formatCmd(app.Spec.Run.Command) + `
-`
+RUN ` + build + `
+
+CMD ` + cmd + `
+`)
 }
