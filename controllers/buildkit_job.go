@@ -43,6 +43,7 @@ func buildJob(app *v1.NpmApp, name string, image string) batchv1.Job {
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
+
 					Volumes: []corev1.Volume{
 						{
 							Name: "workspace",
@@ -51,34 +52,39 @@ func buildJob(app *v1.NpmApp, name string, image string) batchv1.Job {
 							},
 						},
 					},
+
 					InitContainers: []corev1.Container{
 						{
+							// Clones the repo into the shared workspace volume
 							Name:  "git-clone",
 							Image: "alpine/git",
 							Command: []string{
 								"sh", "-c",
-								fmt.Sprintf("git clone %s /workspace", app.Spec.Repo),
+								fmt.Sprintf("git clone --depth=1 %s /workspace", app.Spec.Repo),
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "workspace", MountPath: "/workspace"},
 							},
 						},
 						{
-							Name:  "dockerfile",
+							// Writes the generated Dockerfile into the workspace
+							Name:  "write-dockerfile",
 							Image: "busybox",
 							Command: []string{
 								"sh", "-c",
-								fmt.Sprintf("cat <<'EOF' > /workspace/Dockerfile\n%s\nEOF", dockerfile),
+								fmt.Sprintf("cat <<'DOCKERFILE' > /workspace/Dockerfile\n%s\nDOCKERFILE", dockerfile),
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "workspace", MountPath: "/workspace"},
 							},
 						},
 					},
+
 					Containers: []corev1.Container{
 						{
+							// Runs buildkit rootless — no privileged mode, no process sandbox needed
 							Name:    "buildkit",
-							Image:   "moby/buildkit:latest",
+							Image:   "moby/buildkit:latest-rootless",
 							Command: []string{"buildctl-daemonless.sh"},
 							Args: []string{
 								"build",
@@ -86,13 +92,13 @@ func buildJob(app *v1.NpmApp, name string, image string) batchv1.Job {
 								"--local", "context=/workspace",
 								"--local", "dockerfile=/workspace",
 								"--opt", "filename=Dockerfile",
-								"--output", fmt.Sprintf("type=image,name=%s,push=true", image),
+								"--output", fmt.Sprintf("type=image,name=%s,push=true,registry.insecure=true", image),
 							},
-							Env: []corev1.EnvVar{
-								{
-									Name:  "BUILDKITD_FLAGS",
-									Value: "--oci-worker-no-process-sandbox",
-								},
+							SecurityContext: &corev1.SecurityContext{
+								RunAsUser:              int64Ptr(1000),
+								RunAsGroup:             int64Ptr(1000),
+								RunAsNonRoot:           boolPtr(true),
+								ReadOnlyRootFilesystem: boolPtr(false),
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "workspace", MountPath: "/workspace"},
