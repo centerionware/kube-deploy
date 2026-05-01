@@ -60,15 +60,19 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    app: registry
   name: registry
   namespace: registry
 spec:
+  ports:
+  - nodePort: 31999
+    port: 5000
+    protocol: TCP
+    targetPort: 5000
   selector:
     app: registry
-  ports:
-    - port: 5000
-      targetPort: 5000
-  type: ClusterIP
+  type: NodePort
 ---
 ############################################
 # REGISTRY CLEANUP CRONJOB

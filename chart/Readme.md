@@ -46,11 +46,14 @@ metadata:
   namespace: npm-deployer
 spec:
   repo: https://github.com/livekit-examples/meet
-  build:
-    installCmd: pnpm install
-    buildCmd: pnpm build
+  registry: registry.registry.svc.cluster.local:5000
+  # build:
+  #  installCmd: pnpm install
+  #  buildCmd: pnpm build
+  #run:
+  #  command: ["pnpm", "start"]
   run:
-    command: ["pnpm", "start"]
+    port: 3000
   env:
     LIVEKIT_API_KEY: "your-key"
     LIVEKIT_API_SECRET: "your-secret"
