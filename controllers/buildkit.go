@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	v1 "npm-operator/api/v1alpha1"
@@ -11,11 +10,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-)
-
-const (
-	defaultRegistry     = "registry.registry.svc.cluster.local:5000"
-	defaultPullRegistry = "localhost:31999"
 )
 
 func EnsureBuild(ctx context.Context, c client.Client, app *v1.NpmApp) (string, bool, error) {
@@ -34,21 +28,20 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.NpmApp) (string, 
 		return app.Status.Image, true, nil
 	}
 
-	pushImage := resolvePushImage(*app, commit)
-	pullImage := resolvePullImage(*app, commit)
+	image := resolveImage(*app, commit)
 	jobName := fmt.Sprintf("%s-build-%s", app.Name, commit[:7])
-	log.Info("resolved build target", "pushImage", pushImage, "pullImage", pullImage, "job", jobName)
+	log.Info("resolved build target", "image", image, "job", jobName)
 
 	var job batchv1.Job
 	err = c.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: jobName}, &job)
 	if err != nil {
 		log.Info("build job not found, creating", "job", jobName)
-		if err := ensureBuildJob(ctx, c, app, jobName, pushImage); err != nil {
+		if err := ensureBuildJob(ctx, c, app, jobName, image); err != nil {
 			log.Error(err, "failed to create build job", "job", jobName)
 			return "", false, err
 		}
 		log.Info("build job created", "job", jobName)
-		updateStatus(ctx, c, app, "Building", commit, pullImage)
+		updateStatus(ctx, c, app, "Building", commit, image)
 		return "", false, nil
 	}
 
@@ -59,9 +52,9 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.NpmApp) (string, 
 	)
 
 	if job.Status.Succeeded > 0 {
-		log.Info("build succeeded", "job", jobName, "pullImage", pullImage)
-		updateStatus(ctx, c, app, "Ready", commit, pullImage)
-		return pullImage, true, nil
+		log.Info("build succeeded", "job", jobName, "image", image)
+		updateStatus(ctx, c, app, "Ready", commit, image)
+		return image, true, nil
 	}
 
 	if job.Status.Failed > 0 {
@@ -74,30 +67,12 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.NpmApp) (string, 
 	return "", false, nil
 }
 
-// resolvePushImage returns the image ref used by buildkitd to push to the registry.
-// Uses the in-cluster DNS name which buildkitd can resolve fine.
-func resolvePushImage(app v1.NpmApp, commit string) string {
-	if app.Spec.Build.Output != "" {
-		return fmt.Sprintf("%s:%s", app.Spec.Build.Output, commit[:7])
+func resolveImage(app v1.NpmApp, commit string) string {
+	base := app.Spec.Build.Output
+	if base == "" {
+		base = "registry.local/" + app.Name
 	}
-	registry := app.Spec.Registry
-	if registry == "" {
-		registry = defaultRegistry
-	}
-	return fmt.Sprintf("%s/%s:%s", registry, app.Name, commit[:7])
-}
-
-// resolvePullImage returns the image ref written into the Deployment.
-// Uses localhost:31999 so containerd on any node can pull without
-// needing in-cluster DNS resolution or HTTPS.
-func resolvePullImage(app v1.NpmApp, commit string) string {
-	pushImage := resolvePushImage(app, commit)
-	// Replace the push registry host with the NodePort pull address
-	registry := app.Spec.Registry
-	if registry == "" {
-		registry = defaultRegistry
-	}
-	return strings.Replace(pushImage, registry, defaultPullRegistry, 1)
+	return fmt.Sprintf("%s:%s", base, commit[:7])
 }
 
 func updateStatus(ctx context.Context, c client.Client, app *v1.NpmApp, phase, commit, image string) {

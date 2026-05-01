@@ -40,13 +40,12 @@ func (in *NpmAppList) DeepCopyObject() runtime.Object {
 // ---------------- SPEC ----------------
 
 type NpmAppSpec struct {
-	Repo     string `json:"repo"`
-	Registry string `json:"registry,omitempty"`
+	Repo string `json:"repo"`
 
 	Env map[string]string `json:"env,omitempty"`
 
-	Build NpmBuildSpec `json:"build,omitempty"`
-	Run   NpmRunSpec   `json:"run,omitempty"`
+	Build   NpmBuildSpec   `json:"build,omitempty"`
+	Run     NpmRunSpec     `json:"run,omitempty"`
 	Service NpmServiceSpec `json:"service,omitempty"`
 }
 
@@ -56,12 +55,16 @@ type NpmBuildSpec struct {
 	BuildCmd   string   `json:"buildCmd,omitempty"`
 	Output     string   `json:"output,omitempty"`
 	Args       []string `json:"args,omitempty"`
+	// Registry to push built images to — must be reachable from buildkitd
+	Registry string `json:"registry,omitempty"`
 }
 
 type NpmRunSpec struct {
 	Command []string `json:"command,omitempty"`
 	Args    []string `json:"args,omitempty"`
 	Port    int      `json:"port,omitempty"`
+	// Registry to pull images from — must be reachable from containerd on cluster nodes
+	Registry string `json:"registry,omitempty"`
 }
 
 type NpmServiceSpec struct {
