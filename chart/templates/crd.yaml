@@ -1,29 +1,40 @@
+# ============================================================
+# App CRD â€” build from source and deploy
+# ============================================================
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: npmapps.npm.centerionware.app
+  name: apps.kube-deploy.centerionware.app
   annotations:
     "helm.sh/hook": "pre-install,pre-upgrade"
     "helm.sh/hook-delete-policy": "before-hook-creation"
-
 spec:
-  group: npm.centerionware.app
+  group: kube-deploy.centerionware.app
   scope: Namespaced
-
   names:
-    plural: npmapps
-    singular: npmapp
-    kind: NpmApp
-    shortNames: ["npm"]
-
+    plural: apps
+    singular: app
+    kind: App
+    shortNames: ["app"]
   versions:
     - name: v1alpha1
       served: true
       storage: true
-
       subresources:
         status: {}
-
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Commit
+          type: string
+          jsonPath: .status.commit
+        - name: Image
+          type: string
+          jsonPath: .status.image
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
       schema:
         openAPIV3Schema:
           type: object
@@ -32,8 +43,15 @@ spec:
               type: object
               required: ["repo"]
               properties:
+
                 repo:
                   type: string
+                  description: "Git repository URL to clone and build"
+
+                updateInterval:
+                  type: string
+                  default: "1m"
+                  description: "How often to poll git. Examples: 30s, 1m, 5m, 1h"
 
                 env:
                   type: object
@@ -64,6 +82,12 @@ spec:
                     registry:
                       type: string
                       default: "registry.registry.svc.cluster.local:5000"
+                    gitSecret:
+                      type: string
+                      description: "k8s Secret for git auth. Omit for public repos."
+                    registrySecret:
+                      type: string
+                      description: "k8s Secret for registry push auth"
 
                 run:
                   type: object
@@ -82,29 +106,443 @@ spec:
                     port:
                       type: integer
                       default: 3000
+                    replicas:
+                      type: integer
+                      default: 1
                     registry:
                       type: string
                       default: "localhost:31999"
+                    imagePullSecret:
+                      type: string
+                    resources:
+                      type: object
+                      properties:
+                        cpuRequest:
+                          type: string
+                        memoryRequest:
+                          type: string
+                        cpuLimit:
+                          type: string
+                        memoryLimit:
+                          type: string
+                    healthCheck:
+                      type: object
+                      properties:
+                        path:
+                          type: string
+                          description: "HTTP path for liveness+readiness. Falls back to TCP if empty."
+                    volumes:
+                      type: array
+                      items:
+                        type: object
+                        required: ["name", "mountPath"]
+                        properties:
+                          name:
+                            type: string
+                          mountPath:
+                            type: string
+                          size:
+                            type: string
+                            default: "1Gi"
+                          storageClass:
+                            type: string
+                            default: "local-path"
+                    autoscaling:
+                      type: object
+                      properties:
+                        enabled:
+                          type: boolean
+                          default: false
+                        minReplicas:
+                          type: integer
+                          default: 1
+                        maxReplicas:
+                          type: integer
+                          default: 5
+                        cpuTarget:
+                          type: integer
+                          default: 80
 
                 service:
                   type: object
                   default: {}
                   properties:
+                    type:
+                      type: string
+                      default: "ClusterIP"
+                      enum: ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"]
                     annotations:
                       type: object
                       additionalProperties:
                         type: string
                       default: {}
+                    labels:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    clusterIP:
+                      type: string
+                    externalIPs:
+                      type: array
+                      items:
+                        type: string
+                    loadBalancerIP:
+                      type: string
+                    loadBalancerSourceRanges:
+                      type: array
+                      items:
+                        type: string
+                    externalTrafficPolicy:
+                      type: string
+                      enum: ["Cluster", "Local"]
+                    sessionAffinity:
+                      type: string
+                      enum: ["None", "ClientIP"]
+                    publishNotReadyAddresses:
+                      type: boolean
+                    ports:
+                      type: array
+                      items:
+                        type: object
+                        required: ["port"]
+                        properties:
+                          name:
+                            type: string
+                          port:
+                            type: integer
+                          targetPort:
+                            type: integer
+                          nodePort:
+                            type: integer
+                          protocol:
+                            type: string
+                            enum: ["TCP", "UDP"]
+                            default: "TCP"
+
+                ingress:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: false
+                    host:
+                      type: string
+                    className:
+                      type: string
+                    tlsSecret:
+                      type: string
+                    annotations:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    paths:
+                      type: array
+                      items:
+                        type: object
+                        required: ["path"]
+                        properties:
+                          path:
+                            type: string
+                          pathType:
+                            type: string
+                            enum: ["Prefix", "Exact", "ImplementationSpecific"]
+                            default: "Prefix"
+
+                gateway:
+                  type: object
+                  description: "Gateway API HTTPRoute config. Use either gateway or ingress, not both."
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: false
+                    gatewayRef:
+                      type: object
+                      required: ["name"]
+                      properties:
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        sectionName:
+                          type: string
+                    hostnames:
+                      type: array
+                      items:
+                        type: string
+                    tlsSecret:
+                      type: string
+                    paths:
+                      type: array
+                      items:
+                        type: object
+                        required: ["path"]
+                        properties:
+                          path:
+                            type: string
+                          matchType:
+                            type: string
+                            enum: ["PathPrefix", "Exact", "RegularExpression"]
+                            default: "PathPrefix"
+                    annotations:
+                      type: object
+                      additionalProperties:
+                        type: string
 
             status:
               type: object
               x-kubernetes-preserve-unknown-fields: true
+
+---
+# ============================================================
+# ContainerApp CRD â€” deploy pre-built images directly
+# ============================================================
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: containerapps.kube-deploy.centerionware.app
+  annotations:
+    "helm.sh/hook": "pre-install,pre-upgrade"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+spec:
+  group: kube-deploy.centerionware.app
+  scope: Namespaced
+  names:
+    plural: containerapps
+    singular: containerapp
+    kind: ContainerApp
+    shortNames: ["ca"]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Image
+          type: string
+          jsonPath: .spec.image
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: ["image"]
               properties:
-                phase:
-                  type: string
+
                 image:
                   type: string
-                commit:
-                  type: string
-                lastUpdate:
-                  type: string
+                  description: "Full image ref to deploy e.g. localhost:31999/myapp:abc1234"
+
+                env:
+                  type: object
+                  additionalProperties:
+                    type: string
+
+                run:
+                  type: object
+                  default: {}
+                  properties:
+                    command:
+                      type: array
+                      items:
+                        type: string
+                      default: []
+                    args:
+                      type: array
+                      items:
+                        type: string
+                      default: []
+                    port:
+                      type: integer
+                      default: 3000
+                    replicas:
+                      type: integer
+                      default: 1
+                    registry:
+                      type: string
+                      default: "localhost:31999"
+                    imagePullSecret:
+                      type: string
+                    resources:
+                      type: object
+                      properties:
+                        cpuRequest:
+                          type: string
+                        memoryRequest:
+                          type: string
+                        cpuLimit:
+                          type: string
+                        memoryLimit:
+                          type: string
+                    healthCheck:
+                      type: object
+                      properties:
+                        path:
+                          type: string
+                    volumes:
+                      type: array
+                      items:
+                        type: object
+                        required: ["name", "mountPath"]
+                        properties:
+                          name:
+                            type: string
+                          mountPath:
+                            type: string
+                          size:
+                            type: string
+                            default: "1Gi"
+                          storageClass:
+                            type: string
+                            default: "local-path"
+                    autoscaling:
+                      type: object
+                      properties:
+                        enabled:
+                          type: boolean
+                          default: false
+                        minReplicas:
+                          type: integer
+                          default: 1
+                        maxReplicas:
+                          type: integer
+                          default: 5
+                        cpuTarget:
+                          type: integer
+                          default: 80
+
+                service:
+                  type: object
+                  default: {}
+                  properties:
+                    type:
+                      type: string
+                      default: "ClusterIP"
+                      enum: ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"]
+                    annotations:
+                      type: object
+                      additionalProperties:
+                        type: string
+                      default: {}
+                    labels:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    clusterIP:
+                      type: string
+                    externalIPs:
+                      type: array
+                      items:
+                        type: string
+                    loadBalancerIP:
+                      type: string
+                    loadBalancerSourceRanges:
+                      type: array
+                      items:
+                        type: string
+                    externalTrafficPolicy:
+                      type: string
+                      enum: ["Cluster", "Local"]
+                    sessionAffinity:
+                      type: string
+                      enum: ["None", "ClientIP"]
+                    publishNotReadyAddresses:
+                      type: boolean
+                    ports:
+                      type: array
+                      items:
+                        type: object
+                        required: ["port"]
+                        properties:
+                          name:
+                            type: string
+                          port:
+                            type: integer
+                          targetPort:
+                            type: integer
+                          nodePort:
+                            type: integer
+                          protocol:
+                            type: string
+                            enum: ["TCP", "UDP"]
+                            default: "TCP"
+
+                ingress:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: false
+                    host:
+                      type: string
+                    className:
+                      type: string
+                    tlsSecret:
+                      type: string
+                    annotations:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    paths:
+                      type: array
+                      items:
+                        type: object
+                        required: ["path"]
+                        properties:
+                          path:
+                            type: string
+                          pathType:
+                            type: string
+                            enum: ["Prefix", "Exact", "ImplementationSpecific"]
+                            default: "Prefix"
+
+                gateway:
+                  type: object
+                  description: "Gateway API HTTPRoute. Use either gateway or ingress, not both."
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: false
+                    gatewayRef:
+                      type: object
+                      required: ["name"]
+                      properties:
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        sectionName:
+                          type: string
+                    hostnames:
+                      type: array
+                      items:
+                        type: string
+                    tlsSecret:
+                      type: string
+                    paths:
+                      type: array
+                      items:
+                        type: object
+                        required: ["path"]
+                        properties:
+                          path:
+                            type: string
+                          matchType:
+                            type: string
+                            enum: ["PathPrefix", "Exact", "RegularExpression"]
+                            default: "PathPrefix"
+                    annotations:
+                      type: object
+                      additionalProperties:
+                        type: string
+
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true

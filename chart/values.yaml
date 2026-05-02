@@ -3,10 +3,10 @@ image:
   tag: latest
   pullPolicy: Always
 
-namespace: npm-deployer
+namespace: kube-deploy
 
 serviceAccount:
-  name: npm-operator
+  name: kube-deploy-operator
 
 resources:
   cpu: 100m
@@ -15,8 +15,8 @@ resources:
 defaults:
   build:
     baseImage: node:20-alpine
-    installCommand: "pnpm install"
-    buildCommand: "pnpm build"
+    installCmd: "pnpm install"
+    buildCmd: "pnpm build"
     registry:
       url: registry.registry.svc.cluster.local:5000
       repository: apps

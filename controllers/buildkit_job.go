@@ -82,18 +82,23 @@ func buildJob(app *v1.NpmApp, name string, image string) batchv1.Job {
 
 					Containers: []corev1.Container{
 						{
-							// buildctl client only — talks to the existing buildkitd in the buildkit namespace
+							// Runs buildkit rootless — no privileged mode, no process sandbox needed
 							Name:    "buildkit",
-							Image:   "moby/buildkit:latest",
-							Command: []string{"buildctl"},
+							Image:   "moby/buildkit:latest-rootless",
+							Command: []string{"buildctl-daemonless.sh"},
 							Args: []string{
-								"--addr", "tcp://buildkit-buildkit-service.buildkit.svc.cluster.local:1234",
 								"build",
 								"--frontend", "dockerfile.v0",
 								"--local", "context=/workspace",
 								"--local", "dockerfile=/workspace",
 								"--opt", "filename=Dockerfile",
 								"--output", fmt.Sprintf("type=image,name=%s,push=true,registry.insecure=true", image),
+							},
+							SecurityContext: &corev1.SecurityContext{
+								RunAsUser:              int64Ptr(1000),
+								RunAsGroup:             int64Ptr(1000),
+								RunAsNonRoot:           boolPtr(true),
+								ReadOnlyRootFilesystem: boolPtr(false),
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "workspace", MountPath: "/workspace"},

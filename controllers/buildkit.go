@@ -22,7 +22,7 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.NpmApp) (string, 
 	log := log.FromContext(ctx).WithValues("npmapp", app.Name, "namespace", app.Namespace)
 
 	log.Info("checking latest commit", "repo", app.Spec.Repo)
-	commit, err := getLatestCommit(app.Spec.Repo)
+	commit, err := getLatestCommit(ctx, c, app)
 	if err != nil {
 		log.Error(err, "failed to get latest commit", "repo", app.Spec.Repo)
 		return "", false, err
@@ -34,12 +34,20 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.NpmApp) (string, 
 		pullRegistry = defaultPullRegistry
 	}
 
-	// Only skip if commit matches AND image is using the correct pull registry
+	// Only skip build if commit matches, phase is Ready, and image uses correct pull registry
 	if app.Status.Commit == commit &&
 		app.Status.Phase == "Ready" &&
 		strings.HasPrefix(app.Status.Image, pullRegistry) {
 		log.Info("already up to date, skipping build", "commit", commit, "image", app.Status.Image)
 		return app.Status.Image, true, nil
+	}
+
+	// New commit or stale image — trigger a new build
+	if app.Status.Commit != commit {
+		log.Info("new commit detected, triggering rebuild",
+			"previous", app.Status.Commit,
+			"latest", commit,
+		)
 	}
 
 	pushImage := resolvePushImage(*app, commit)
@@ -83,7 +91,7 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.NpmApp) (string, 
 }
 
 // resolvePushImage returns the image ref buildkitd uses to push.
-// Uses build.registry — reachable from buildkitd via in-cluster DNS.
+// Includes namespace to prevent collisions across namespaces.
 func resolvePushImage(app v1.NpmApp, commit string) string {
 	if app.Spec.Build.Output != "" {
 		return fmt.Sprintf("%s:%s", app.Spec.Build.Output, commit[:7])
@@ -92,7 +100,7 @@ func resolvePushImage(app v1.NpmApp, commit string) string {
 	if registry == "" {
 		registry = defaultBuildRegistry
 	}
-	return fmt.Sprintf("%s/%s:%s", registry, app.Name, commit[:7])
+	return fmt.Sprintf("%s/%s/%s:%s", registry, app.Namespace, app.Name, commit[:7])
 }
 
 // resolvePullImage returns the image ref written into the Deployment.

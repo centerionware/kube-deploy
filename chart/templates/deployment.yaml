@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: npm-operator
+  name: kube-deploy-operator
   namespace: {{ .Values.namespace }}
 
 spec:
@@ -9,12 +9,12 @@ spec:
 
   selector:
     matchLabels:
-      app: npm-operator
+      app: kube-deploy-operator
 
   template:
     metadata:
       labels:
-        app: npm-operator
+        app: kube-deploy-operator
 
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}

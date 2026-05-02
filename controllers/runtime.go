@@ -13,12 +13,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const defaultPort = 3000
+
 func EnsureRuntime(ctx context.Context, c client.Client, app *v1.NpmApp, image string) error {
 	log := log.FromContext(ctx).WithValues("npmapp", app.Name, "namespace", app.Namespace)
 
+	port := int32(app.Spec.Run.Port)
+	if port == 0 {
+		port = defaultPort
+	}
+
 	labels := map[string]string{"app": app.Name}
 
-	log.Info("upserting deployment", "image", image, "port", app.Spec.Run.Port)
+	log.Info("upserting deployment", "image", image, "port", port)
 	deploy := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      app.Name,
@@ -38,7 +45,7 @@ func EnsureRuntime(ctx context.Context, c client.Client, app *v1.NpmApp, image s
 							Args:    app.Spec.Run.Args,
 							Env:     buildEnv(app.Spec.Env),
 							Ports: []corev1.ContainerPort{
-								{ContainerPort: int32(app.Spec.Run.Port)},
+								{ContainerPort: port, Protocol: corev1.ProtocolTCP},
 							},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
@@ -63,7 +70,7 @@ func EnsureRuntime(ctx context.Context, c client.Client, app *v1.NpmApp, image s
 	}
 	log.Info("deployment upserted", "image", image)
 
-	log.Info("upserting service", "port", app.Spec.Run.Port, "annotations", app.Spec.Service.Annotations)
+	log.Info("upserting service", "port", port, "annotations", app.Spec.Service.Annotations)
 	svc := corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        app.Name,
@@ -73,16 +80,16 @@ func EnsureRuntime(ctx context.Context, c client.Client, app *v1.NpmApp, image s
 		Spec: corev1.ServiceSpec{
 			Selector: labels,
 			Ports: []corev1.ServicePort{
-				{Port: int32(app.Spec.Run.Port)},
+				{Port: port, Protocol: corev1.ProtocolTCP},
 			},
 		},
 	}
 
 	if err := upsertService(ctx, c, svc); err != nil {
-		log.Error(err, "failed to upsert service", "port", app.Spec.Run.Port)
+		log.Error(err, "failed to upsert service", "port", port)
 		return err
 	}
-	log.Info("service upserted", "port", app.Spec.Run.Port)
+	log.Info("service upserted", "port", port)
 
 	return nil
 }

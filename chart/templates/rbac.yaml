@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: npm-operator
+  name: kube-deploy-operator
 
 rules:
   - apiGroups: ["npm.centerionware.app"]
@@ -29,12 +29,12 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: npm-operator
+  name: kube-deploy-operator
 
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: npm-operator
+  name: kube-deploy-operator
 
 subjects:
   - kind: ServiceAccount
