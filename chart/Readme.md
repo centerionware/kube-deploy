@@ -39,24 +39,18 @@ spec:
 
 # Example App
 ```
-apiVersion: npm.centerionware.app/v1alpha1
-kind: NpmApp
+apiVersion: kube-deploy.centerionware.app/v1alpha1
+kind: App
 metadata:
   name: meet
   namespace: npm-deployer
 spec:
   repo: https://github.com/livekit-examples/meet
-  # build:
-  #  installCmd: pnpm install
-  #  buildCmd: pnpm build
-  #run:
-  #  command: ["pnpm", "start"]
-  run:
-    port: 3000
   env:
     LIVEKIT_API_KEY: "your-key"
     LIVEKIT_API_SECRET: "your-secret"
     LIVEKIT_URL: "ws://your-livekit-url"
+
   service:
     annotations:
       netbird.io/expose: "true"
