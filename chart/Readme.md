@@ -4,12 +4,12 @@
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
-  name: kube-npm-platform
+  name: kube-deploy
   namespace: flux-system
 
 spec:
   interval: 1m
-  url: https://github.com/centerionware/kube-npm-netbird-deployer
+  url: https://github.com/centerionware/kube-deploy
   ref:
     branch: main
 ---
@@ -27,7 +27,7 @@ spec:
       chart: ./chart
       sourceRef:
         kind: GitRepository
-        name: kube-npm-platform
+        name: kube-deploy
         namespace: flux-system
 
   values:
