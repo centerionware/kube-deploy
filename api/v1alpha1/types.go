@@ -231,20 +231,39 @@ type AutoscalingSpec struct {
 // RBAC
 // ----------------------------------------------------------------
 
-// RBACSpec defines ServiceAccount, Role, and optional ClusterRole binding for the app pod.
+// RBACSpec defines the full RBAC chain for an app.
+// The operator creates a ServiceAccount and wires it into the pod.
 type RBACSpec struct {
-	// ServiceAccountName overrides the default (app name)
-	ServiceAccountName string     `json:"serviceAccountName,omitempty"`
-	// Rules defines namespace-scoped RBAC rules (creates a Role + RoleBinding)
-	Rules              []RBACRule `json:"rules,omitempty"`
-	// ClusterRoleName binds an existing ClusterRole to this app's ServiceAccount
-	ClusterRoleName    string     `json:"clusterRoleName,omitempty"`
+	// ServiceAccountName overrides the auto-generated name (defaults to app name)
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
+	// Roles defines namespace-scoped roles to CREATE and bind to the ServiceAccount
+	Roles []RoleDefinition `json:"roles,omitempty"`
+
+	// ClusterRoles defines cluster-scoped roles to CREATE and bind to the ServiceAccount
+	ClusterRoles []RoleDefinition `json:"clusterRoles,omitempty"`
+
+	// RoleBindings binds EXISTING namespace Roles to the ServiceAccount (by name)
+	RoleBindings []string `json:"roleBindings,omitempty"`
+
+	// ClusterRoleBindings binds EXISTING ClusterRoles to the ServiceAccount (by name)
+	// e.g. ["cluster-admin", "view"]
+	ClusterRoleBindings []string `json:"clusterRoleBindings,omitempty"`
+}
+
+// RoleDefinition defines a Role or ClusterRole to be created
+type RoleDefinition struct {
+	// Name of the Role/ClusterRole to create
+	Name  string     `json:"name"`
+	Rules []RBACRule `json:"rules"`
 }
 
 type RBACRule struct {
-	APIGroups     []string `json:"apiGroups"`
-	Resources     []string `json:"resources"`
-	Verbs         []string `json:"verbs"`
+	// APIGroups e.g. [""] for core, ["apps"], ["batch"]
+	APIGroups []string `json:"apiGroups"`
+	Resources []string `json:"resources"`
+	Verbs     []string `json:"verbs"`
+	// ResourceNames restricts to specific named resources (optional)
 	ResourceNames []string `json:"resourceNames,omitempty"`
 }
 
