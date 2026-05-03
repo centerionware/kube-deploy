@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"reflect"
 
 	v1 "kube-deploy/api/v1alpha1"
 
@@ -87,8 +86,9 @@ func EnsureIngress(ctx context.Context, c client.Client, app *v1.App, port int32
 		return err
 	}
 
-	if reflect.DeepEqual(existing.Spec, desired.Spec) &&
-		reflect.DeepEqual(existing.Annotations, desired.Annotations) {
+	// Compare only fields we control — ignore k8s-injected metadata
+	if ingressSpecEqual(existing.Spec, desired.Spec) &&
+		annotationsEqual(existing.Annotations, desired.Annotations) {
 		log.Info("ingress unchanged, skipping update")
 		return nil
 	}
@@ -96,4 +96,34 @@ func EnsureIngress(ctx context.Context, c client.Client, app *v1.App, port int32
 	log.Info("ingress changed, updating", "host", app.Spec.Ingress.Host)
 	desired.ResourceVersion = existing.ResourceVersion
 	return c.Update(ctx, &desired)
+}
+
+func ingressSpecEqual(a, b networkingv1.IngressSpec) bool {
+	if len(a.Rules) != len(b.Rules) {
+		return false
+	}
+	for i := range a.Rules {
+		if a.Rules[i].Host != b.Rules[i].Host {
+			return false
+		}
+		aPaths := a.Rules[i].HTTP
+		bPaths := b.Rules[i].HTTP
+		if (aPaths == nil) != (bPaths == nil) {
+			return false
+		}
+		if aPaths != nil && len(aPaths.Paths) != len(bPaths.Paths) {
+			return false
+		}
+		if aPaths != nil {
+			for j := range aPaths.Paths {
+				if aPaths.Paths[j].Path != bPaths.Paths[j].Path {
+					return false
+				}
+			}
+		}
+	}
+	if len(a.TLS) != len(b.TLS) {
+		return false
+	}
+	return true
 }

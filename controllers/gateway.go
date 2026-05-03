@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	v1 "kube-deploy/api/v1alpha1"
 
@@ -112,8 +111,9 @@ func EnsureGateway(ctx context.Context, c client.Client, app *v1.App, port int32
 		return err
 	}
 
-	if reflect.DeepEqual(existing.Spec, desired.Spec) &&
-		reflect.DeepEqual(existing.Annotations, desired.Annotations) {
+	// Compare only fields we control
+	if httpRouteSpecEqual(existing.Spec, desired.Spec) &&
+		annotationsEqual(existing.Annotations, desired.Annotations) {
 		log.Info("HTTPRoute unchanged, skipping update")
 		return nil
 	}
@@ -137,4 +137,30 @@ func deleteHTTPRoute(ctx context.Context, c client.Client, name, namespace strin
 		return nil
 	}
 	return err
+}
+
+func httpRouteSpecEqual(a, b gatewayv1.HTTPRouteSpec) bool {
+	if len(a.ParentRefs) != len(b.ParentRefs) {
+		return false
+	}
+	for i := range a.ParentRefs {
+		if a.ParentRefs[i].Name != b.ParentRefs[i].Name {
+			return false
+		}
+		if a.ParentRefs[i].Namespace != b.ParentRefs[i].Namespace {
+			return false
+		}
+	}
+	if len(a.Hostnames) != len(b.Hostnames) {
+		return false
+	}
+	for i := range a.Hostnames {
+		if a.Hostnames[i] != b.Hostnames[i] {
+			return false
+		}
+	}
+	if len(a.Rules) != len(b.Rules) {
+		return false
+	}
+	return true
 }

@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"reflect"
 
 	v1 "kube-deploy/api/v1alpha1"
 
@@ -78,7 +77,8 @@ func EnsureHPA(ctx context.Context, c client.Client, app *v1.App) error {
 		return err
 	}
 
-	if reflect.DeepEqual(existing.Spec, desired.Spec) {
+	// Compare only fields we control
+	if hpaSpecEqual(existing.Spec, desired.Spec) {
 		log.Info("HPA unchanged, skipping update")
 		return nil
 	}
@@ -86,4 +86,37 @@ func EnsureHPA(ctx context.Context, c client.Client, app *v1.App) error {
 	log.Info("HPA changed, updating", "min", minReplicas, "max", maxReplicas, "cpuTarget", cpuTarget)
 	desired.ResourceVersion = existing.ResourceVersion
 	return c.Update(ctx, &desired)
+}
+
+func hpaSpecEqual(a, b autoscalingv2.HorizontalPodAutoscalerSpec) bool {
+	if a.MaxReplicas != b.MaxReplicas {
+		return false
+	}
+	if (a.MinReplicas == nil) != (b.MinReplicas == nil) {
+		return false
+	}
+	if a.MinReplicas != nil && *a.MinReplicas != *b.MinReplicas {
+		return false
+	}
+	if len(a.Metrics) != len(b.Metrics) {
+		return false
+	}
+	for i := range a.Metrics {
+		am := a.Metrics[i]
+		bm := b.Metrics[i]
+		if am.Type != bm.Type {
+			return false
+		}
+		if am.Resource != nil && bm.Resource != nil {
+			if am.Resource.Name != bm.Resource.Name {
+				return false
+			}
+			if am.Resource.Target.AverageUtilization != nil &&
+				bm.Resource.Target.AverageUtilization != nil &&
+				*am.Resource.Target.AverageUtilization != *bm.Resource.Target.AverageUtilization {
+				return false
+			}
+		}
+	}
+	return true
 }
