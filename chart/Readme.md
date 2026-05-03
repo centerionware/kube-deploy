@@ -16,7 +16,7 @@ spec:
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
-  name: npm-operator
+  name: kube-deploy
   namespace: flux-system
 
 spec:
@@ -43,7 +43,7 @@ apiVersion: kube-deploy.centerionware.app/v1alpha1
 kind: App
 metadata:
   name: meet
-  namespace: npm-deployer
+  namespace: kube-deploy
 spec:
   repo: https://github.com/livekit-examples/meet
   env:
