@@ -105,6 +105,15 @@ type BuildSpec struct {
 	BaseImage      string   `json:"baseImage,omitempty"`
 	InstallCmd     string   `json:"installCmd,omitempty"`
 	BuildCmd       string   `json:"buildCmd,omitempty"`
+
+	// DockerfileMode controls how the Dockerfile is sourced:
+	//   auto     (default) — use repo Dockerfile if present, else generate
+	//   generate — always use the built-in generator
+	//   inline   — use the Dockerfile provided in the Dockerfile field
+	DockerfileMode string `json:"dockerfileMode,omitempty"`
+
+	// Dockerfile contains a complete Dockerfile, used only when DockerfileMode is "inline"
+	Dockerfile string `json:"dockerfile,omitempty"`
 	Output         string   `json:"output,omitempty"`
 	Args           []string `json:"args,omitempty"`
 	Registry       string   `json:"registry,omitempty"`

@@ -258,6 +258,26 @@ run:
 
 **Any project with its own Dockerfile:** just push the Dockerfile to the repo root and kube-deploy will use it as-is.
 
+## Dockerfile Overrides
+
+```
+# Default — uses repo Dockerfile if present, generates one if not
+build: {}
+
+# Always generate — ignores any Dockerfile in the repo
+build:
+  dockerfileMode: generate
+
+# Inline — your own complete Dockerfile in the CR
+build:
+  dockerfileMode: inline
+  dockerfile: |
+    FROM node:20-alpine
+    WORKDIR /app
+    COPY . .
+    RUN npm ci
+    CMD ["node", "server.js"]
+```
 
 ## Use of AI Disclaimer
 

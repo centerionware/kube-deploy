@@ -18,7 +18,7 @@ func ensureBuildJob(ctx context.Context, c client.Client, app *v1.App, name stri
 
 	job := buildJob(app, name, image)
 
-	log.Info("submitting build job", "image", image, "repo", app.Spec.Repo)
+	log.Info("submitting build job", "image", image, "repo", app.Spec.Repo, "dockerfileMode", dockerfileMode(app))
 	if err := c.Create(ctx, &job); err != nil {
 		log.Error(err, "failed to create build job")
 		return err
@@ -28,13 +28,24 @@ func ensureBuildJob(ctx context.Context, c client.Client, app *v1.App, name stri
 	return nil
 }
 
-func buildJob(app *v1.App, name string, image string) batchv1.Job {
-	dockerfile := generateDockerfile(*app)
+// dockerfileMode returns the resolved mode, defaulting to "auto"
+func dockerfileMode(app *v1.App) string {
+	switch app.Spec.Build.DockerfileMode {
+	case "generate", "inline":
+		return app.Spec.Build.DockerfileMode
+	default:
+		return "auto"
+	}
+}
 
+func buildJob(app *v1.App, name string, image string) batchv1.Job {
 	jobLabels := map[string]string{
 		"kube-deploy/app":       app.Name,
 		"kube-deploy/namespace": app.Namespace,
 	}
+
+	// Build the init containers based on dockerfile mode
+	initContainers := buildInitContainers(app)
 
 	return batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -56,30 +67,7 @@ func buildJob(app *v1.App, name string, image string) batchv1.Job {
 							},
 						},
 					},
-					InitContainers: []corev1.Container{
-						{
-							Name:  "git-clone",
-							Image: "alpine/git",
-							Command: []string{
-								"sh", "-c",
-								fmt.Sprintf("git clone --depth=1 %s /workspace", app.Spec.Repo),
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{Name: "workspace", MountPath: "/workspace"},
-							},
-						},
-						{
-							Name:  "write-dockerfile",
-							Image: "busybox",
-							Command: []string{
-								"sh", "-c",
-								fmt.Sprintf("cat <<'DOCKERFILE' > /workspace/Dockerfile\n%s\nDOCKERFILE", dockerfile),
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{Name: "workspace", MountPath: "/workspace"},
-							},
-						},
-					},
+					InitContainers: initContainers,
 					Containers: []corev1.Container{
 						{
 							Name:    "buildkit",
@@ -102,5 +90,87 @@ func buildJob(app *v1.App, name string, image string) batchv1.Job {
 				},
 			},
 		},
+	}
+}
+
+func buildInitContainers(app *v1.App) []corev1.Container {
+	mode := dockerfileMode(app)
+
+	// Step 1: always clone the repo
+	cloneContainer := corev1.Container{
+		Name:  "git-clone",
+		Image: "alpine/git",
+		Command: []string{
+			"sh", "-c",
+			fmt.Sprintf("git clone --depth=1 %s /workspace", app.Spec.Repo),
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "workspace", MountPath: "/workspace"},
+		},
+	}
+
+	switch mode {
+	case "inline":
+		// Use the Dockerfile provided directly in the spec — overwrite anything in the repo
+		return []corev1.Container{
+			cloneContainer,
+			{
+				Name:  "write-dockerfile",
+				Image: "busybox",
+				Command: []string{
+					"sh", "-c",
+					fmt.Sprintf("cat <<'DOCKERFILE' > /workspace/Dockerfile\n%s\nDOCKERFILE", app.Spec.Build.Dockerfile),
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "workspace", MountPath: "/workspace"},
+				},
+			},
+		}
+
+	case "generate":
+		// Always use the built-in generator — overwrite any Dockerfile in the repo
+		dockerfile := generateDockerfile(*app)
+		return []corev1.Container{
+			cloneContainer,
+			{
+				Name:  "write-dockerfile",
+				Image: "busybox",
+				Command: []string{
+					"sh", "-c",
+					fmt.Sprintf("cat <<'DOCKERFILE' > /workspace/Dockerfile\n%s\nDOCKERFILE", dockerfile),
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "workspace", MountPath: "/workspace"},
+				},
+			},
+		}
+
+	default: // "auto"
+		// Use the repo's Dockerfile if it exists, otherwise generate one
+		dockerfile := generateDockerfile(*app)
+		return []corev1.Container{
+			cloneContainer,
+			{
+				Name:  "write-dockerfile",
+				Image: "busybox",
+				Command: []string{
+					"sh", "-c",
+					fmt.Sprintf(
+						`if [ ! -f /workspace/Dockerfile ]; then
+  echo "No Dockerfile found, using generated one"
+  cat <<'DOCKERFILE' > /workspace/Dockerfile
+%s
+DOCKERFILE
+else
+  echo "Using existing Dockerfile from repo"
+fi`,
+						dockerfile,
+					),
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: "workspace", MountPath: "/workspace"},
+				},
+			},
+		}
 	}
 }

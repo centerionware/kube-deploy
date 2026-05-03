@@ -80,6 +80,15 @@ spec:
                       type: string
                     registrySecret:
                       type: string
+                    dockerfileMode:
+                      type: string
+                      default: "auto"
+                      enum: ["auto", "generate", "inline"]
+                      description: "auto=use repo Dockerfile if present else generate, generate=always generate, inline=use dockerfile field"
+                    dockerfile:
+                      type: string
+                      default: ""
+                      description: "Complete Dockerfile content. Only used when dockerfileMode is inline."
                 run:
                   type: object
                   default: {}
