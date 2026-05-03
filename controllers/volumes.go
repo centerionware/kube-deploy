@@ -13,8 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func EnsureVolumes(ctx context.Context, c client.Client, app *v1.NpmApp) error {
-	log := log.FromContext(ctx).WithValues("npmapp", app.Name, "namespace", app.Namespace)
+func EnsureVolumes(ctx context.Context, c client.Client, app *v1.App) error {
+	log := log.FromContext(ctx).WithValues("app", app.Name, "namespace", app.Namespace)
 
 	for _, vol := range app.Spec.Run.Volumes {
 		size := vol.Size
@@ -32,9 +32,7 @@ func EnsureVolumes(ctx context.Context, c client.Client, app *v1.NpmApp) error {
 				Namespace: app.Namespace,
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
-				AccessModes: []corev1.PersistentVolumeAccessMode{
-					corev1.ReadWriteOnce,
-				},
+				AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 				StorageClassName: &storageClass,
 				Resources: corev1.VolumeResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -47,7 +45,7 @@ func EnsureVolumes(ctx context.Context, c client.Client, app *v1.NpmApp) error {
 		var existing corev1.PersistentVolumeClaim
 		err := c.Get(ctx, client.ObjectKeyFromObject(&pvc), &existing)
 		if errors.IsNotFound(err) {
-			log.Info("creating PVC", "name", vol.Name, "size", size, "storageClass", storageClass)
+			log.Info("creating PVC", "name", vol.Name, "size", size)
 			if err := c.Create(ctx, &pvc); err != nil {
 				return err
 			}
@@ -56,8 +54,6 @@ func EnsureVolumes(ctx context.Context, c client.Client, app *v1.NpmApp) error {
 		} else {
 			log.Info("PVC already exists", "name", vol.Name)
 		}
-		// PVCs are not updated after creation — immutable spec
 	}
-
 	return nil
 }

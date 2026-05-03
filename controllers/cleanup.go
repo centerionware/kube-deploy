@@ -15,12 +15,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// cleanupRuntime deletes Deployment, Service, Ingress, and HPA for an app.
-// Used by both NpmApp and ContainerApp on deletion.
-func cleanupRuntime(ctx context.Context, c client.Client, app *v1.NpmApp) error {
+func cleanupRuntime(ctx context.Context, c client.Client, app *v1.App) error {
 	log := log.FromContext(ctx).WithValues("app", app.Name, "namespace", app.Namespace)
 
-	// Deployment
 	var deploy appsv1.Deployment
 	if err := c.Get(ctx, client.ObjectKey{Name: app.Name, Namespace: app.Namespace}, &deploy); err == nil {
 		log.Info("deleting deployment")
@@ -29,7 +26,6 @@ func cleanupRuntime(ctx context.Context, c client.Client, app *v1.NpmApp) error 
 		}
 	}
 
-	// Service
 	var svc corev1.Service
 	if err := c.Get(ctx, client.ObjectKey{Name: app.Name, Namespace: app.Namespace}, &svc); err == nil {
 		log.Info("deleting service")
@@ -38,7 +34,6 @@ func cleanupRuntime(ctx context.Context, c client.Client, app *v1.NpmApp) error 
 		}
 	}
 
-	// Ingress
 	var ing networkingv1.Ingress
 	if err := c.Get(ctx, client.ObjectKey{Name: app.Name, Namespace: app.Namespace}, &ing); err == nil {
 		log.Info("deleting ingress")
@@ -47,7 +42,10 @@ func cleanupRuntime(ctx context.Context, c client.Client, app *v1.NpmApp) error 
 		}
 	}
 
-	// HPA
+	if err := deleteHTTPRoute(ctx, c, app.Name, app.Namespace); err != nil {
+		log.Error(err, "HTTPRoute delete failed (best-effort)")
+	}
+
 	var hpa autoscalingv2.HorizontalPodAutoscaler
 	if err := c.Get(ctx, client.ObjectKey{Name: app.Name, Namespace: app.Namespace}, &hpa); err == nil {
 		log.Info("deleting HPA")
@@ -56,5 +54,6 @@ func cleanupRuntime(ctx context.Context, c client.Client, app *v1.NpmApp) error 
 		}
 	}
 
+	log.Info("runtime cleanup complete")
 	return nil
 }

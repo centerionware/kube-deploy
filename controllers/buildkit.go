@@ -19,7 +19,7 @@ const (
 )
 
 func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, bool, error) {
-	log := log.FromContext(ctx).WithValues("npmapp", app.Name, "namespace", app.Namespace)
+	log := log.FromContext(ctx).WithValues("app", app.Name, "namespace", app.Namespace)
 
 	log.Info("checking latest commit", "repo", app.Spec.Repo)
 	commit, err := getLatestCommit(ctx, c, app)
@@ -34,7 +34,6 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, boo
 		pullRegistry = defaultPullRegistry
 	}
 
-	// Only skip build if commit matches, phase is Ready, and image uses correct pull registry
 	if app.Status.Commit == commit &&
 		app.Status.Phase == "Ready" &&
 		strings.HasPrefix(app.Status.Image, pullRegistry) {
@@ -42,7 +41,6 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, boo
 		return app.Status.Image, true, nil
 	}
 
-	// New commit or stale image — trigger a new build
 	if app.Status.Commit != commit {
 		log.Info("new commit detected, triggering rebuild",
 			"previous", app.Status.Commit,
@@ -90,8 +88,6 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, boo
 	return "", false, nil
 }
 
-// resolvePushImage returns the image ref buildkitd uses to push.
-// Includes namespace to prevent collisions across namespaces.
 func resolvePushImage(app v1.App, commit string) string {
 	if app.Spec.Build.Output != "" {
 		return fmt.Sprintf("%s:%s", app.Spec.Build.Output, commit[:7])
@@ -103,8 +99,6 @@ func resolvePushImage(app v1.App, commit string) string {
 	return fmt.Sprintf("%s/%s/%s:%s", registry, app.Namespace, app.Name, commit[:7])
 }
 
-// resolvePullImage returns the image ref written into the Deployment.
-// Uses run.registry — reachable from containerd on cluster nodes.
 func resolvePullImage(app v1.App, commit string) string {
 	buildRegistry := app.Spec.Build.Registry
 	if buildRegistry == "" {
@@ -119,7 +113,7 @@ func resolvePullImage(app v1.App, commit string) string {
 }
 
 func updateStatus(ctx context.Context, c client.Client, app *v1.App, phase, commit, image string) {
-	log := log.FromContext(ctx).WithValues("npmapp", app.Name, "namespace", app.Namespace)
+	log := log.FromContext(ctx).WithValues("app", app.Name, "namespace", app.Namespace)
 	log.Info("updating status", "phase", phase, "commit", commit, "image", image)
 
 	app.Status.Phase = phase

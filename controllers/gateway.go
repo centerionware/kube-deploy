@@ -16,12 +16,6 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-var httpRouteGVR = schema.GroupVersionResource{
-	Group:    "gateway.networking.k8s.io",
-	Version:  "v1",
-	Resource: "httproutes",
-}
-
 func EnsureGateway(ctx context.Context, c client.Client, app *v1.App, port int32) error {
 	log := log.FromContext(ctx).WithValues("app", app.Name, "namespace", app.Namespace)
 
@@ -116,14 +110,11 @@ func EnsureGateway(ctx context.Context, c client.Client, app *v1.App, port int32
 	if err != nil {
 		return err
 	}
-
 	log.Info("updating HTTPRoute", "gateway", gw.GatewayRef.Name)
 	route.ResourceVersion = existing.ResourceVersion
 	return c.Update(ctx, &route)
 }
 
-// deleteHTTPRoute deletes an HTTPRoute using unstructured so we don't hard-fail
-// if the Gateway API CRD isn't installed in the cluster.
 func deleteHTTPRoute(ctx context.Context, c client.Client, name, namespace string) error {
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{
@@ -133,20 +124,9 @@ func deleteHTTPRoute(ctx context.Context, c client.Client, name, namespace strin
 	})
 	obj.SetName(name)
 	obj.SetNamespace(namespace)
-
 	err := c.Delete(ctx, obj)
-	if errors.IsNotFound(err) || isNoKindMatchError(err) {
+	if errors.IsNotFound(err) {
 		return nil
 	}
 	return err
-}
-
-// isNoKindMatchError returns true if the error is because the CRD isn't installed
-func isNoKindMatchError(err error) bool {
-	if err == nil {
-		return false
-	}
-	return errors.IsNotFound(err) ||
-		client.IgnoreNotFound(err) == nil ||
-		fmt.Sprintf("%T", err) == "*meta.NoKindMatchError"
 }

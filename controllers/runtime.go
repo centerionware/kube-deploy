@@ -8,54 +8,143 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const defaultPort = 3000
 
-func EnsureRuntime(ctx context.Context, c client.Client, app *v1.NpmApp, image string) error {
-	log := log.FromContext(ctx).WithValues("npmapp", app.Name, "namespace", app.Namespace)
+func EnsureRuntime(ctx context.Context, c client.Client, app *v1.App, image string) error {
+	log := log.FromContext(ctx).WithValues("app", app.Name, "namespace", app.Namespace)
 
 	port := int32(app.Spec.Run.Port)
 	if port == 0 {
 		port = defaultPort
 	}
 
-	labels := map[string]string{"app": app.Name}
+	replicas := int32(1)
+	if app.Spec.Run.Replicas > 0 {
+		replicas = int32(app.Spec.Run.Replicas)
+	}
 
-	log.Info("upserting deployment", "image", image, "port", port)
+	podLabels := map[string]string{
+		"app":                   app.Name,
+		"kube-deploy/app":       app.Name,
+		"kube-deploy/namespace": app.Namespace,
+	}
+
+	var volumeMounts []corev1.VolumeMount
+	var volumes []corev1.Volume
+	for _, vol := range app.Spec.Run.Volumes {
+		volumes = append(volumes, corev1.Volume{
+			Name: vol.Name,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: vol.Name,
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      vol.Name,
+			MountPath: vol.MountPath,
+		})
+	}
+
+	resources := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    must("50m"),
+			corev1.ResourceMemory: must("64Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    must("500m"),
+			corev1.ResourceMemory: must("512Mi"),
+		},
+	}
+	if app.Spec.Run.Resources.CPURequest != "" {
+		resources.Requests[corev1.ResourceCPU] = must(app.Spec.Run.Resources.CPURequest)
+	}
+	if app.Spec.Run.Resources.MemoryRequest != "" {
+		resources.Requests[corev1.ResourceMemory] = must(app.Spec.Run.Resources.MemoryRequest)
+	}
+	if app.Spec.Run.Resources.CPULimit != "" {
+		resources.Limits[corev1.ResourceCPU] = must(app.Spec.Run.Resources.CPULimit)
+	}
+	if app.Spec.Run.Resources.MemoryLimit != "" {
+		resources.Limits[corev1.ResourceMemory] = must(app.Spec.Run.Resources.MemoryLimit)
+	}
+
+	var liveness, readiness *corev1.Probe
+	if app.Spec.Run.HealthCheck.Path != "" {
+		liveness = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: app.Spec.Run.HealthCheck.Path,
+					Port: intstr.FromInt32(port),
+				},
+			},
+			InitialDelaySeconds: 10,
+			PeriodSeconds:       15,
+			FailureThreshold:    3,
+		}
+		readiness = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: app.Spec.Run.HealthCheck.Path,
+					Port: intstr.FromInt32(port),
+				},
+			},
+			InitialDelaySeconds: 5,
+			PeriodSeconds:       10,
+			FailureThreshold:    3,
+		}
+	} else {
+		readiness = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				TCPSocket: &corev1.TCPSocketAction{
+					Port: intstr.FromInt32(port),
+				},
+			},
+			InitialDelaySeconds: 5,
+			PeriodSeconds:       10,
+		}
+	}
+
+	var imagePullSecrets []corev1.LocalObjectReference
+	if app.Spec.Run.ImagePullSecret != "" {
+		imagePullSecrets = []corev1.LocalObjectReference{{Name: app.Spec.Run.ImagePullSecret}}
+	}
+
+	log.Info("upserting deployment", "image", image, "port", port, "replicas", replicas)
 	deploy := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      app.Name,
 			Namespace: app.Namespace,
+			Labels:    podLabels,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: int32Ptr(1),
-			Selector: &metav1.LabelSelector{MatchLabels: labels},
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": app.Name},
+			},
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: labels},
+				ObjectMeta: metav1.ObjectMeta{Labels: podLabels},
 				Spec: corev1.PodSpec{
+					ImagePullSecrets: imagePullSecrets,
+					Volumes:          volumes,
 					Containers: []corev1.Container{
 						{
-							Name:    "app",
-							Image:   image,
-							Command: app.Spec.Run.Command,
-							Args:    app.Spec.Run.Args,
-							Env:     buildEnv(app.Spec.Env),
+							Name:           "app",
+							Image:          image,
+							Command:        app.Spec.Run.Command,
+							Args:           app.Spec.Run.Args,
+							Env:            buildEnv(app.Spec.Env),
+							Resources:      resources,
+							VolumeMounts:   volumeMounts,
+							LivenessProbe:  liveness,
+							ReadinessProbe: readiness,
 							Ports: []corev1.ContainerPort{
 								{ContainerPort: port, Protocol: corev1.ProtocolTCP},
-							},
-							Resources: corev1.ResourceRequirements{
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    must("500m"),
-									corev1.ResourceMemory: must("512Mi"),
-								},
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    must("50m"),
-									corev1.ResourceMemory: must("64Mi"),
-								},
 							},
 						},
 					},
@@ -65,31 +154,125 @@ func EnsureRuntime(ctx context.Context, c client.Client, app *v1.NpmApp, image s
 	}
 
 	if err := upsertDeployment(ctx, c, deploy); err != nil {
-		log.Error(err, "failed to upsert deployment", "image", image)
+		log.Error(err, "failed to upsert deployment")
 		return err
 	}
 	log.Info("deployment upserted", "image", image)
 
-	log.Info("upserting service", "port", port, "annotations", app.Spec.Service.Annotations)
-	svc := corev1.Service{
+	svc := buildService(app, port)
+	if err := upsertService(ctx, c, svc); err != nil {
+		log.Error(err, "failed to upsert service")
+		return err
+	}
+	log.Info("service upserted", "type", svc.Spec.Type)
+
+	if app.Spec.Gateway != nil && app.Spec.Gateway.Enabled {
+		if err := EnsureGateway(ctx, c, app, port); err != nil {
+			log.Error(err, "failed to upsert HTTPRoute")
+			return err
+		}
+	} else {
+		if err := EnsureIngress(ctx, c, app, port); err != nil {
+			log.Error(err, "failed to upsert ingress")
+			return err
+		}
+	}
+
+	if err := EnsureVolumes(ctx, c, app); err != nil {
+		log.Error(err, "failed to ensure volumes")
+		return err
+	}
+
+	if err := EnsureHPA(ctx, c, app); err != nil {
+		log.Error(err, "failed to ensure HPA")
+		return err
+	}
+
+	return nil
+}
+
+func buildService(app *v1.App, defaultPort int32) corev1.Service {
+	spec := app.Spec.Service
+
+	var svcPorts []corev1.ServicePort
+	if len(spec.Ports) > 0 {
+		for _, p := range spec.Ports {
+			proto := corev1.ProtocolTCP
+			if p.Protocol == "UDP" {
+				proto = corev1.ProtocolUDP
+			}
+			targetPort := p.TargetPort
+			if targetPort == 0 {
+				targetPort = p.Port
+			}
+			sp := corev1.ServicePort{
+				Name:       p.Name,
+				Port:       p.Port,
+				TargetPort: intstr.FromInt32(targetPort),
+				Protocol:   proto,
+			}
+			if p.NodePort != 0 {
+				sp.NodePort = p.NodePort
+			}
+			svcPorts = append(svcPorts, sp)
+		}
+	} else {
+		svcPorts = []corev1.ServicePort{
+			{
+				Port:       defaultPort,
+				TargetPort: intstr.FromInt32(defaultPort),
+				Protocol:   corev1.ProtocolTCP,
+			},
+		}
+	}
+
+	svcType := corev1.ServiceTypeClusterIP
+	if spec.Type != "" {
+		svcType = corev1.ServiceType(spec.Type)
+	}
+
+	svcLabels := map[string]string{
+		"kube-deploy/app":       app.Name,
+		"kube-deploy/namespace": app.Namespace,
+	}
+	for k, v := range spec.Labels {
+		svcLabels[k] = v
+	}
+
+	svcSpec := corev1.ServiceSpec{
+		Type:     svcType,
+		Selector: map[string]string{"app": app.Name},
+		Ports:    svcPorts,
+	}
+	if spec.ClusterIP != "" {
+		svcSpec.ClusterIP = spec.ClusterIP
+	}
+	if len(spec.ExternalIPs) > 0 {
+		svcSpec.ExternalIPs = spec.ExternalIPs
+	}
+	if spec.LoadBalancerIP != "" {
+		svcSpec.LoadBalancerIP = spec.LoadBalancerIP
+	}
+	if len(spec.LoadBalancerSourceRanges) > 0 {
+		svcSpec.LoadBalancerSourceRanges = spec.LoadBalancerSourceRanges
+	}
+	if spec.ExternalTrafficPolicy != "" {
+		svcSpec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicy(spec.ExternalTrafficPolicy)
+	}
+	if spec.SessionAffinity != "" {
+		svcSpec.SessionAffinity = corev1.ServiceAffinity(spec.SessionAffinity)
+	}
+	if spec.PublishNotReadyAddresses {
+		svcSpec.PublishNotReadyAddresses = true
+	}
+
+	return corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        app.Name,
 			Namespace:   app.Namespace,
-			Annotations: app.Spec.Service.Annotations,
+			Labels:      svcLabels,
+			Annotations: spec.Annotations,
 		},
-		Spec: corev1.ServiceSpec{
-			Selector: labels,
-			Ports: []corev1.ServicePort{
-				{Port: port, Protocol: corev1.ProtocolTCP},
-			},
-		},
+		Spec: svcSpec,
 	}
-
-	if err := upsertService(ctx, c, svc); err != nil {
-		log.Error(err, "failed to upsert service", "port", port)
-		return err
-	}
-	log.Info("service upserted", "port", port)
-
-	return nil
 }

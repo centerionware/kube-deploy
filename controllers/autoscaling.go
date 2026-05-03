@@ -14,10 +14,9 @@ import (
 )
 
 func EnsureHPA(ctx context.Context, c client.Client, app *v1.App) error {
-	log := log.FromContext(ctx).WithValues("npmapp", app.Name, "namespace", app.Namespace)
+	log := log.FromContext(ctx).WithValues("app", app.Name, "namespace", app.Namespace)
 
 	if app.Spec.Run.Autoscaling == nil || !app.Spec.Run.Autoscaling.Enabled {
-		// Remove HPA if it exists and autoscaling is disabled
 		var existing autoscalingv2.HorizontalPodAutoscaler
 		if err := c.Get(ctx, client.ObjectKey{Name: app.Name, Namespace: app.Namespace}, &existing); err == nil {
 			log.Info("removing HPA (disabled)")
@@ -77,7 +76,6 @@ func EnsureHPA(ctx context.Context, c client.Client, app *v1.App) error {
 	if err != nil {
 		return err
 	}
-
 	log.Info("updating HPA", "min", minReplicas, "max", maxReplicas, "cpuTarget", cpuTarget)
 	hpa.ResourceVersion = existing.ResourceVersion
 	return c.Update(ctx, &hpa)

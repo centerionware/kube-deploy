@@ -26,7 +26,6 @@ func SetupContainerApp(mgr ctrl.Manager, r *ContainerAppReconciler) error {
 
 func (r *ContainerAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("containerapp", req.NamespacedName)
-
 	log.Info("reconcile triggered")
 
 	var app v1.ContainerApp
@@ -38,7 +37,6 @@ func (r *ContainerAppReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
-	// --- Deletion ---
 	if !app.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&app, containerAppFinalizer) {
 			log.Info("ContainerApp deleted, cleaning up")
@@ -53,7 +51,6 @@ func (r *ContainerAppReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 
-	// --- Finalizer ---
 	if !controllerutil.ContainsFinalizer(&app, containerAppFinalizer) {
 		controllerutil.AddFinalizer(&app, containerAppFinalizer)
 		if err := r.Update(ctx, &app); err != nil {
@@ -63,7 +60,6 @@ func (r *ContainerAppReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	log.Info("deploying container", "image", app.Spec.Image)
 
-	// Project ContainerApp into a synthetic App to reuse EnsureRuntime
 	synthetic := &v1.App{
 		ObjectMeta: app.ObjectMeta,
 		Spec: v1.AppSpec{
@@ -92,19 +88,16 @@ func (r *ContainerAppReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	log.Info("ContainerApp reconcile complete", "image", app.Spec.Image)
-	// ContainerApp only reacts to spec changes — no git polling needed
 	return ctrl.Result{}, nil
 }
 
 func (r *ContainerAppReconciler) cleanup(ctx context.Context, app *v1.ContainerApp) error {
 	log := log.FromContext(ctx).WithValues("containerapp", app.Name, "namespace", app.Namespace)
-
 	synthetic := &v1.App{ObjectMeta: app.ObjectMeta}
 	if err := cleanupRuntime(ctx, r.Client, synthetic); err != nil {
 		log.Error(err, "runtime cleanup failed")
 		return err
 	}
-
 	log.Info("ContainerApp cleanup complete")
 	return nil
 }

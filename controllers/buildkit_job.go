@@ -9,15 +9,13 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func ensureBuildJob(ctx context.Context, c client.Client, app *v1.NpmApp, name string, image string) error {
-	log := log.FromContext(ctx).WithValues("npmapp", app.Name, "namespace", app.Namespace, "job", name)
+func ensureBuildJob(ctx context.Context, c client.Client, app *v1.App, name string, image string) error {
+	log := log.FromContext(ctx).WithValues("app", app.Name, "namespace", app.Namespace, "job", name)
 
-	log.Info("generating dockerfile for job")
 	job := buildJob(app, name, image)
 
 	log.Info("submitting build job", "image", image, "repo", app.Spec.Repo)
@@ -26,24 +24,30 @@ func ensureBuildJob(ctx context.Context, c client.Client, app *v1.NpmApp, name s
 		return err
 	}
 
-	log.Info("build job submitted successfully", "job", name)
+	log.Info("build job submitted", "job", name)
 	return nil
 }
 
-func buildJob(app *v1.NpmApp, name string, image string) batchv1.Job {
+func buildJob(app *v1.App, name string, image string) batchv1.Job {
 	dockerfile := generateDockerfile(*app)
+
+	jobLabels := map[string]string{
+		"kube-deploy/app":       app.Name,
+		"kube-deploy/namespace": app.Namespace,
+	}
 
 	return batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: app.Namespace,
+			Labels:    jobLabels,
 		},
 		Spec: batchv1.JobSpec{
 			BackoffLimit: int32Ptr(1),
 			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: jobLabels},
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
-
 					Volumes: []corev1.Volume{
 						{
 							Name: "workspace",
@@ -52,10 +56,8 @@ func buildJob(app *v1.NpmApp, name string, image string) batchv1.Job {
 							},
 						},
 					},
-
 					InitContainers: []corev1.Container{
 						{
-							// Clones the repo into the shared workspace volume
 							Name:  "git-clone",
 							Image: "alpine/git",
 							Command: []string{
@@ -67,7 +69,6 @@ func buildJob(app *v1.NpmApp, name string, image string) batchv1.Job {
 							},
 						},
 						{
-							// Writes the generated Dockerfile into the workspace
 							Name:  "write-dockerfile",
 							Image: "busybox",
 							Command: []string{
@@ -79,26 +80,19 @@ func buildJob(app *v1.NpmApp, name string, image string) batchv1.Job {
 							},
 						},
 					},
-
 					Containers: []corev1.Container{
 						{
-							// Runs buildkit rootless — no privileged mode, no process sandbox needed
 							Name:    "buildkit",
-							Image:   "moby/buildkit:latest-rootless",
-							Command: []string{"buildctl-daemonless.sh"},
+							Image:   "moby/buildkit:latest",
+							Command: []string{"buildctl"},
 							Args: []string{
+								"--addr", "tcp://buildkit-buildkit-service.buildkit.svc.cluster.local:1234",
 								"build",
 								"--frontend", "dockerfile.v0",
 								"--local", "context=/workspace",
 								"--local", "dockerfile=/workspace",
 								"--opt", "filename=Dockerfile",
 								"--output", fmt.Sprintf("type=image,name=%s,push=true,registry.insecure=true", image),
-							},
-							SecurityContext: &corev1.SecurityContext{
-								RunAsUser:              int64Ptr(1000),
-								RunAsGroup:             int64Ptr(1000),
-								RunAsNonRoot:           boolPtr(true),
-								ReadOnlyRootFilesystem: boolPtr(false),
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "workspace", MountPath: "/workspace"},

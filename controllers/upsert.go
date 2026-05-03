@@ -23,8 +23,7 @@ func upsertDeployment(ctx context.Context, c client.Client, obj appsv1.Deploymen
 		log.Error(err, "failed to get deployment")
 		return err
 	}
-
-	log.Info("updating existing deployment")
+	log.Info("updating deployment")
 	obj.ResourceVersion = existing.ResourceVersion
 	return c.Update(ctx, &obj)
 }
@@ -42,10 +41,8 @@ func upsertService(ctx context.Context, c client.Client, obj corev1.Service) err
 		log.Error(err, "failed to get service")
 		return err
 	}
-
-	log.Info("updating existing service")
+	log.Info("updating service")
 	obj.ResourceVersion = existing.ResourceVersion
-	// ClusterIP is immutable — must preserve it
 	obj.Spec.ClusterIP = existing.Spec.ClusterIP
 	obj.Spec.ClusterIPs = existing.Spec.ClusterIPs
 	return c.Update(ctx, &obj)
