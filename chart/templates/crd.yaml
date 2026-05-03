@@ -43,21 +43,15 @@ spec:
               type: object
               required: ["repo"]
               properties:
-
                 repo:
                   type: string
-                  description: "Git repository URL to clone and build"
-
                 updateInterval:
                   type: string
                   default: "1m"
-                  description: "How often to poll git. Examples: 30s, 1m, 5m, 1h"
-
                 env:
                   type: object
                   additionalProperties:
                     type: string
-
                 build:
                   type: object
                   default: {}
@@ -84,11 +78,8 @@ spec:
                       default: "registry.registry.svc.cluster.local:5000"
                     gitSecret:
                       type: string
-                      description: "k8s Secret for git auth. Omit for public repos."
                     registrySecret:
                       type: string
-                      description: "k8s Secret for registry push auth"
-
                 run:
                   type: object
                   default: {}
@@ -114,6 +105,9 @@ spec:
                       default: "localhost:31999"
                     imagePullSecret:
                       type: string
+                    hostNetwork:
+                      type: boolean
+                      default: false
                     resources:
                       type: object
                       properties:
@@ -130,7 +124,6 @@ spec:
                       properties:
                         path:
                           type: string
-                          description: "HTTP path for liveness+readiness. Falls back to TCP if empty."
                     volumes:
                       type: array
                       items:
@@ -141,12 +134,65 @@ spec:
                             type: string
                           mountPath:
                             type: string
-                          size:
-                            type: string
-                            default: "1Gi"
-                          storageClass:
-                            type: string
-                            default: "local-path"
+                          pvc:
+                            type: object
+                            properties:
+                              claimName:
+                                type: string
+                              size:
+                                type: string
+                                default: "1Gi"
+                              storageClass:
+                                type: string
+                                default: "local-path"
+                              readOnly:
+                                type: boolean
+                          configMap:
+                            type: object
+                            required: ["name"]
+                            properties:
+                              name:
+                                type: string
+                              items:
+                                type: array
+                                items:
+                                  type: object
+                                  required: ["key", "path"]
+                                  properties:
+                                    key:
+                                      type: string
+                                    path:
+                                      type: string
+                          secret:
+                            type: object
+                            required: ["secretName"]
+                            properties:
+                              secretName:
+                                type: string
+                              items:
+                                type: array
+                                items:
+                                  type: object
+                                  required: ["key", "path"]
+                                  properties:
+                                    key:
+                                      type: string
+                                    path:
+                                      type: string
+                          emptyDir:
+                            type: object
+                            properties:
+                              medium:
+                                type: string
+                                enum: ["", "Memory"]
+                          hostPath:
+                            type: object
+                            required: ["path"]
+                            properties:
+                              path:
+                                type: string
+                              type:
+                                type: string
                     autoscaling:
                       type: object
                       properties:
@@ -162,7 +208,6 @@ spec:
                         cpuTarget:
                           type: integer
                           default: 80
-
                 service:
                   type: object
                   default: {}
@@ -208,6 +253,7 @@ spec:
                         properties:
                           name:
                             type: string
+                            default: ""
                           port:
                             type: integer
                           targetPort:
@@ -218,7 +264,6 @@ spec:
                             type: string
                             enum: ["TCP", "UDP"]
                             default: "TCP"
-
                 ingress:
                   type: object
                   properties:
@@ -247,10 +292,8 @@ spec:
                             type: string
                             enum: ["Prefix", "Exact", "ImplementationSpecific"]
                             default: "Prefix"
-
                 gateway:
                   type: object
-                  description: "Gateway API HTTPRoute config. Use either gateway or ingress, not both."
                   properties:
                     enabled:
                       type: boolean
@@ -287,7 +330,6 @@ spec:
                       type: object
                       additionalProperties:
                         type: string
-
             status:
               type: object
               x-kubernetes-preserve-unknown-fields: true
@@ -335,16 +377,12 @@ spec:
               type: object
               required: ["image"]
               properties:
-
                 image:
                   type: string
-                  description: "Full image ref to deploy e.g. localhost:31999/myapp:abc1234"
-
                 env:
                   type: object
                   additionalProperties:
                     type: string
-
                 run:
                   type: object
                   default: {}
@@ -370,6 +408,9 @@ spec:
                       default: "localhost:31999"
                     imagePullSecret:
                       type: string
+                    hostNetwork:
+                      type: boolean
+                      default: false
                     resources:
                       type: object
                       properties:
@@ -396,12 +437,65 @@ spec:
                             type: string
                           mountPath:
                             type: string
-                          size:
-                            type: string
-                            default: "1Gi"
-                          storageClass:
-                            type: string
-                            default: "local-path"
+                          pvc:
+                            type: object
+                            properties:
+                              claimName:
+                                type: string
+                              size:
+                                type: string
+                                default: "1Gi"
+                              storageClass:
+                                type: string
+                                default: "local-path"
+                              readOnly:
+                                type: boolean
+                          configMap:
+                            type: object
+                            required: ["name"]
+                            properties:
+                              name:
+                                type: string
+                              items:
+                                type: array
+                                items:
+                                  type: object
+                                  required: ["key", "path"]
+                                  properties:
+                                    key:
+                                      type: string
+                                    path:
+                                      type: string
+                          secret:
+                            type: object
+                            required: ["secretName"]
+                            properties:
+                              secretName:
+                                type: string
+                              items:
+                                type: array
+                                items:
+                                  type: object
+                                  required: ["key", "path"]
+                                  properties:
+                                    key:
+                                      type: string
+                                    path:
+                                      type: string
+                          emptyDir:
+                            type: object
+                            properties:
+                              medium:
+                                type: string
+                                enum: ["", "Memory"]
+                          hostPath:
+                            type: object
+                            required: ["path"]
+                            properties:
+                              path:
+                                type: string
+                              type:
+                                type: string
                     autoscaling:
                       type: object
                       properties:
@@ -417,7 +511,6 @@ spec:
                         cpuTarget:
                           type: integer
                           default: 80
-
                 service:
                   type: object
                   default: {}
@@ -463,6 +556,7 @@ spec:
                         properties:
                           name:
                             type: string
+                            default: ""
                           port:
                             type: integer
                           targetPort:
@@ -473,7 +567,6 @@ spec:
                             type: string
                             enum: ["TCP", "UDP"]
                             default: "TCP"
-
                 ingress:
                   type: object
                   properties:
@@ -502,10 +595,8 @@ spec:
                             type: string
                             enum: ["Prefix", "Exact", "ImplementationSpecific"]
                             default: "Prefix"
-
                 gateway:
                   type: object
-                  description: "Gateway API HTTPRoute. Use either gateway or ingress, not both."
                   properties:
                     enabled:
                       type: boolean
@@ -542,7 +633,6 @@ spec:
                       type: object
                       additionalProperties:
                         type: string
-
             status:
               type: object
               x-kubernetes-preserve-unknown-fields: true

@@ -46,12 +46,20 @@ metadata:
   namespace: kube-deploy
 spec:
   repo: https://github.com/livekit-examples/meet
+
+  run:
+    port: 3000
+
   env:
     LIVEKIT_API_KEY: "your-key"
     LIVEKIT_API_SECRET: "your-secret"
     LIVEKIT_URL: "ws://your-livekit-url"
 
   service:
+    ports:
+      - port: 80
+        targetPort: 3000
+        protocol: TCP
     annotations:
       netbird.io/expose: "true"
       netbird.io/groups: "media"

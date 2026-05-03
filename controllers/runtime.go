@@ -34,21 +34,10 @@ func EnsureRuntime(ctx context.Context, c client.Client, app *v1.App, image stri
 		"kube-deploy/namespace": app.Namespace,
 	}
 
-	var volumeMounts []corev1.VolumeMount
-	var volumes []corev1.Volume
-	for _, vol := range app.Spec.Run.Volumes {
-		volumes = append(volumes, corev1.Volume{
-			Name: vol.Name,
-			VolumeSource: corev1.VolumeSource{
-				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: vol.Name,
-				},
-			},
-		})
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      vol.Name,
-			MountPath: vol.MountPath,
-		})
+	volumes, volumeMounts, err := buildVolumes(app.Spec.Run.Volumes)
+	if err != nil {
+		log.Error(err, "failed to build volumes")
+		return err
 	}
 
 	resources := corev1.ResourceRequirements{
@@ -131,6 +120,7 @@ func EnsureRuntime(ctx context.Context, c client.Client, app *v1.App, image stri
 				ObjectMeta: metav1.ObjectMeta{Labels: podLabels},
 				Spec: corev1.PodSpec{
 					ImagePullSecrets: imagePullSecrets,
+					HostNetwork:      app.Spec.Run.HostNetwork,
 					Volumes:          volumes,
 					Containers: []corev1.Container{
 						{

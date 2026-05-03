@@ -13,7 +13,6 @@ var GroupVersion = schema.GroupVersion{
 
 // ----------------------------------------------------------------
 // App — build from source and deploy
-// Formerly NpmApp. Supports any language/build system.
 // ----------------------------------------------------------------
 
 type App struct {
@@ -43,24 +42,18 @@ func (in *AppList) DeepCopyObject() runtime.Object {
 }
 
 type AppSpec struct {
-	// Repo is the git repository URL to clone and build
-	Repo string `json:"repo"`
-
-	// UpdateInterval controls how often git is polled for new commits.
-	// Accepts Go duration strings: 30s, 1m, 5m, 1h. Defaults to 1m.
-	UpdateInterval string `json:"updateInterval,omitempty"`
-
-	Env map[string]string `json:"env,omitempty"`
-
-	Build   BuildSpec       `json:"build,omitempty"`
-	Run     RunSpec         `json:"run,omitempty"`
-	Service ServiceSpec     `json:"service,omitempty"`
-	Ingress *IngressSpec    `json:"ingress,omitempty"`
-	Gateway *GatewaySpec    `json:"gateway,omitempty"`
+	Repo           string            `json:"repo"`
+	UpdateInterval string            `json:"updateInterval,omitempty"`
+	Env            map[string]string `json:"env,omitempty"`
+	Build          BuildSpec         `json:"build,omitempty"`
+	Run            RunSpec           `json:"run,omitempty"`
+	Service        ServiceSpec       `json:"service,omitempty"`
+	Ingress        *IngressSpec      `json:"ingress,omitempty"`
+	Gateway        *GatewaySpec      `json:"gateway,omitempty"`
 }
 
 // ----------------------------------------------------------------
-// ContainerApp — deploy a pre-built image, no build stage
+// ContainerApp — deploy a pre-built image
 // ----------------------------------------------------------------
 
 type ContainerApp struct {
@@ -90,9 +83,7 @@ func (in *ContainerAppList) DeepCopyObject() runtime.Object {
 }
 
 type ContainerAppSpec struct {
-	// Image is the full image ref to deploy e.g. "nginx:latest"
-	Image string `json:"image"`
-
+	Image   string            `json:"image"`
 	Env     map[string]string `json:"env,omitempty"`
 	Run     RunSpec           `json:"run,omitempty"`
 	Service ServiceSpec       `json:"service,omitempty"`
@@ -101,9 +92,8 @@ type ContainerAppSpec struct {
 }
 
 type ContainerAppStatus struct {
-	// Message holds human-readable status or error detail
-	Message    string `json:"message,omitempty"`
 	Phase      string `json:"phase,omitempty"`
+	Message    string `json:"message,omitempty"`
 	LastUpdate string `json:"lastUpdate,omitempty"`
 }
 
@@ -112,29 +102,14 @@ type ContainerAppStatus struct {
 // ----------------------------------------------------------------
 
 type BuildSpec struct {
-	// BaseImage is the builder base image. Default: node:20-alpine
-	BaseImage string `json:"baseImage,omitempty"`
-
-	// InstallCmd runs first. Default: npm install --legacy-peer-deps
-	InstallCmd string `json:"installCmd,omitempty"`
-
-	// BuildCmd runs after install. Default: npm run build
-	BuildCmd string `json:"buildCmd,omitempty"`
-
-	// Output overrides the full image name (without tag)
-	Output string   `json:"output,omitempty"`
-	Args   []string `json:"args,omitempty"`
-
-	// Registry to push built images to — reachable from buildkitd
-	// Default: registry.registry.svc.cluster.local:5000
-	Registry string `json:"registry,omitempty"`
-
-	// GitSecret: k8s Secret name for git auth. Omit for public repos.
-	// HTTPS: "username" + "password". SSH: "ssh-privatekey" + optional "ssh-passphrase".
-	GitSecret string `json:"gitSecret,omitempty"`
-
-	// RegistrySecret: k8s Secret name for registry push auth (future)
-	RegistrySecret string `json:"registrySecret,omitempty"`
+	BaseImage      string   `json:"baseImage,omitempty"`
+	InstallCmd     string   `json:"installCmd,omitempty"`
+	BuildCmd       string   `json:"buildCmd,omitempty"`
+	Output         string   `json:"output,omitempty"`
+	Args           []string `json:"args,omitempty"`
+	Registry       string   `json:"registry,omitempty"`
+	GitSecret      string   `json:"gitSecret,omitempty"`
+	RegistrySecret string   `json:"registrySecret,omitempty"`
 }
 
 // ----------------------------------------------------------------
@@ -142,22 +117,17 @@ type BuildSpec struct {
 // ----------------------------------------------------------------
 
 type RunSpec struct {
-	Command  []string `json:"command,omitempty"`
-	Args     []string `json:"args,omitempty"`
-	Port     int      `json:"port,omitempty"`
-	Replicas int      `json:"replicas,omitempty"`
-
-	// Registry to pull images from — reachable from containerd on nodes
-	// Default: localhost:31999
-	Registry string `json:"registry,omitempty"`
-
-	// ImagePullSecret: k8s Secret name for private registry pull auth
-	ImagePullSecret string `json:"imagePullSecret,omitempty"`
-
-	Resources   ResourceSpec     `json:"resources,omitempty"`
-	HealthCheck HealthCheckSpec  `json:"healthCheck,omitempty"`
-	Volumes     []VolumeSpec     `json:"volumes,omitempty"`
-	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
+	Command         []string         `json:"command,omitempty"`
+	Args            []string         `json:"args,omitempty"`
+	Port            int              `json:"port,omitempty"`
+	Replicas        int              `json:"replicas,omitempty"`
+	Registry        string           `json:"registry,omitempty"`
+	ImagePullSecret string           `json:"imagePullSecret,omitempty"`
+	HostNetwork     bool             `json:"hostNetwork,omitempty"`
+	Resources       ResourceSpec     `json:"resources,omitempty"`
+	HealthCheck     HealthCheckSpec  `json:"healthCheck,omitempty"`
+	Volumes         []VolumeSpec     `json:"volumes,omitempty"`
+	Autoscaling     *AutoscalingSpec `json:"autoscaling,omitempty"`
 }
 
 type ResourceSpec struct {
@@ -168,54 +138,98 @@ type ResourceSpec struct {
 }
 
 type HealthCheckSpec struct {
-	// Path for HTTP liveness+readiness e.g. "/healthz"
-	// Falls back to TCP socket check if empty
 	Path string `json:"path,omitempty"`
 }
 
+// VolumeSpec supports PVC, ConfigMap, Secret, EmptyDir, and HostPath.
+// Exactly one source field should be set.
 type VolumeSpec struct {
-	Name         string `json:"name"`
-	MountPath    string `json:"mountPath"`
+	// Name is the volume name, referenced by the mount
+	Name      string `json:"name"`
+	MountPath string `json:"mountPath"`
+
+	// --- Source types (set exactly one) ---
+
+	// PVC creates or mounts a PersistentVolumeClaim
+	PVC *PVCVolumeSource `json:"pvc,omitempty"`
+
+	// ConfigMap mounts a ConfigMap as a volume
+	ConfigMap *ConfigMapVolumeSource `json:"configMap,omitempty"`
+
+	// Secret mounts a Secret as a volume
+	Secret *SecretVolumeSource `json:"secret,omitempty"`
+
+	// EmptyDir mounts a temporary empty directory
+	EmptyDir *EmptyDirVolumeSource `json:"emptyDir,omitempty"`
+
+	// HostPath mounts a path from the host node
+	HostPath *HostPathVolumeSource `json:"hostPath,omitempty"`
+}
+
+type PVCVolumeSource struct {
+	// ClaimName of an existing PVC, or leave empty to auto-create one
+	ClaimName    string `json:"claimName,omitempty"`
 	Size         string `json:"size,omitempty"`
 	StorageClass string `json:"storageClass,omitempty"`
+	ReadOnly     bool   `json:"readOnly,omitempty"`
+}
+
+type ConfigMapVolumeSource struct {
+	// Name of the ConfigMap
+	Name string `json:"name"`
+	// Optional: mount specific keys as files
+	// If empty, all keys are mounted
+	Items []KeyToPath `json:"items,omitempty"`
+}
+
+type SecretVolumeSource struct {
+	// Name of the Secret
+	SecretName string `json:"secretName"`
+	// Optional: mount specific keys as files
+	Items []KeyToPath `json:"items,omitempty"`
+}
+
+type EmptyDirVolumeSource struct {
+	// Medium: "" (default) or "Memory" for tmpfs
+	Medium string `json:"medium,omitempty"`
+}
+
+type HostPathVolumeSource struct {
+	Path string `json:"path"`
+	// Type: "", DirectoryOrCreate, Directory, FileOrCreate, File, Socket, etc.
+	Type string `json:"type,omitempty"`
+}
+
+type KeyToPath struct {
+	// Key in the ConfigMap or Secret
+	Key  string `json:"key"`
+	// Path to mount the key as (filename inside the mountPath)
+	Path string `json:"path"`
 }
 
 type AutoscalingSpec struct {
 	Enabled     bool `json:"enabled"`
 	MinReplicas int  `json:"minReplicas,omitempty"`
 	MaxReplicas int  `json:"maxReplicas,omitempty"`
-	// CPUTarget is target CPU utilization percentage. Default: 80
-	CPUTarget int `json:"cpuTarget,omitempty"`
+	CPUTarget   int  `json:"cpuTarget,omitempty"`
 }
 
 // ----------------------------------------------------------------
-// SERVICE — full Kubernetes Service override surface
+// SERVICE
 // ----------------------------------------------------------------
 
 type ServiceSpec struct {
-	// Type: ClusterIP | NodePort | LoadBalancer | ExternalName. Default: ClusterIP
-	Type string `json:"type,omitempty"`
-
-	Annotations map[string]string `json:"annotations,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-
-	// ClusterIP override. Use "None" for headless.
-	ClusterIP string `json:"clusterIP,omitempty"`
-
-	ExternalIPs              []string `json:"externalIPs,omitempty"`
-	LoadBalancerIP           string   `json:"loadBalancerIP,omitempty"`
-	LoadBalancerSourceRanges []string `json:"loadBalancerSourceRanges,omitempty"`
-
-	// ExternalTrafficPolicy: Cluster | Local
-	ExternalTrafficPolicy string `json:"externalTrafficPolicy,omitempty"`
-
-	// SessionAffinity: None | ClientIP
-	SessionAffinity string `json:"sessionAffinity,omitempty"`
-
-	PublishNotReadyAddresses bool `json:"publishNotReadyAddresses,omitempty"`
-
-	// Ports overrides the default single-port mapping from run.port
-	Ports []ServicePortSpec `json:"ports,omitempty"`
+	Type                     string            `json:"type,omitempty"`
+	Annotations              map[string]string `json:"annotations,omitempty"`
+	Labels                   map[string]string `json:"labels,omitempty"`
+	ClusterIP                string            `json:"clusterIP,omitempty"`
+	ExternalIPs              []string          `json:"externalIPs,omitempty"`
+	LoadBalancerIP           string            `json:"loadBalancerIP,omitempty"`
+	LoadBalancerSourceRanges []string          `json:"loadBalancerSourceRanges,omitempty"`
+	ExternalTrafficPolicy    string            `json:"externalTrafficPolicy,omitempty"`
+	SessionAffinity          string            `json:"sessionAffinity,omitempty"`
+	PublishNotReadyAddresses bool              `json:"publishNotReadyAddresses,omitempty"`
+	Ports                    []ServicePortSpec `json:"ports,omitempty"`
 }
 
 type ServicePortSpec struct {
@@ -223,8 +237,7 @@ type ServicePortSpec struct {
 	Port       int32  `json:"port"`
 	TargetPort int32  `json:"targetPort,omitempty"`
 	NodePort   int32  `json:"nodePort,omitempty"`
-	// Protocol: TCP | UDP. Default: TCP
-	Protocol string `json:"protocol,omitempty"`
+	Protocol   string `json:"protocol,omitempty"`
 }
 
 // ----------------------------------------------------------------
@@ -232,62 +245,45 @@ type ServicePortSpec struct {
 // ----------------------------------------------------------------
 
 type IngressSpec struct {
-	Enabled   bool    `json:"enabled"`
-	Host      string  `json:"host,omitempty"`
-	ClassName *string `json:"className,omitempty"`
-	TLSSecret string  `json:"tlsSecret,omitempty"`
-
+	Enabled     bool              `json:"enabled"`
+	Host        string            `json:"host,omitempty"`
+	ClassName   *string           `json:"className,omitempty"`
+	TLSSecret   string            `json:"tlsSecret,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// Paths overrides the default "/" PathPrefix route
-	Paths []IngressPathSpec `json:"paths,omitempty"`
+	Paths       []IngressPathSpec `json:"paths,omitempty"`
 }
 
 type IngressPathSpec struct {
-	Path string `json:"path"`
-	// PathType: Prefix | Exact | ImplementationSpecific. Default: Prefix
+	Path     string `json:"path"`
 	PathType string `json:"pathType,omitempty"`
 }
 
 // ----------------------------------------------------------------
-// GATEWAY API — HTTPRoute
-// Use either ingress or gateway, not both.
+// GATEWAY API
 // ----------------------------------------------------------------
 
 type GatewaySpec struct {
-	Enabled bool `json:"enabled"`
-
-	// GatewayRef is the Gateway this HTTPRoute attaches to
-	GatewayRef GatewayRefSpec `json:"gatewayRef"`
-
-	// Hostnames the HTTPRoute matches on
-	Hostnames []string `json:"hostnames,omitempty"`
-
-	// TLSSecret for cert reference in the Gateway listener (optional)
-	TLSSecret string `json:"tlsSecret,omitempty"`
-
-	// Paths overrides the default "/" PathPrefix match
-	Paths []GatewayPathSpec `json:"paths,omitempty"`
-
+	Enabled     bool              `json:"enabled"`
+	GatewayRef  GatewayRefSpec    `json:"gatewayRef"`
+	Hostnames   []string          `json:"hostnames,omitempty"`
+	TLSSecret   string            `json:"tlsSecret,omitempty"`
+	Paths       []GatewayPathSpec `json:"paths,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 type GatewayRefSpec struct {
-	Name      string `json:"name"`
-	// Namespace defaults to same namespace as the App
+	Name        string `json:"name"`
 	Namespace   string `json:"namespace,omitempty"`
-	// SectionName targets a specific listener on the Gateway
 	SectionName string `json:"sectionName,omitempty"`
 }
 
 type GatewayPathSpec struct {
-	Path string `json:"path"`
-	// MatchType: PathPrefix | Exact | RegularExpression. Default: PathPrefix
+	Path      string `json:"path"`
 	MatchType string `json:"matchType,omitempty"`
 }
 
 // ----------------------------------------------------------------
-// STATUS — shared shape
+// STATUS
 // ----------------------------------------------------------------
 
 type AppStatus struct {
