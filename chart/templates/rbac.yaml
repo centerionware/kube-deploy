@@ -4,24 +4,50 @@ metadata:
   name: kube-deploy-operator
 
 rules:
-  - apiGroups: ["npm.centerionware.app"]
-    resources: ["npmapps"]
+  # App CRD
+  - apiGroups: ["kube-deploy.centerionware.app"]
+    resources: ["apps"]
     verbs: ["get", "list", "watch", "create", "update", "patch"]
-  
-  - apiGroups: ["npm.centerionware.app"]
-    resources: ["npmapps/status"]
+
+  - apiGroups: ["kube-deploy.centerionware.app"]
+    resources: ["apps/status"]
     verbs: ["get", "update", "patch"]
-  
+
+  # ContainerApp CRD
+  - apiGroups: ["kube-deploy.centerionware.app"]
+    resources: ["containerapps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+  - apiGroups: ["kube-deploy.centerionware.app"]
+    resources: ["containerapps/status"]
+    verbs: ["get", "update", "patch"]
+
+  # Kubernetes core resources
   - apiGroups: ["apps"]
     resources: ["deployments"]
     verbs: ["*"]
-  
+
   - apiGroups: [""]
-    resources: ["services"]
+    resources: ["services", "persistentvolumeclaims", "secrets"]
     verbs: ["*"]
-  
+
   - apiGroups: ["batch"]
     resources: ["jobs"]
+    verbs: ["*"]
+
+  # Ingress
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["*"]
+
+  # Gateway API
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes"]
+    verbs: ["*"]
+
+  # Autoscaling
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
     verbs: ["*"]
 
 ---
