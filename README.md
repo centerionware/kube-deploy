@@ -325,7 +325,7 @@ This creates: a ServiceAccount named livekit, a Role livekit-configmap-reader + 
 
 ## Use of AI Disclaimer
 
-ChatGPT was originally used to generate the skeleton of this project. Claude Sonnet 4.6 was used to get it into it's current state. 
+ChatGPT was originally used to generate the skeleton of this project. Claude Sonnet 4.6 was used to get it into its current state. 
 
 AI will be used to write everything up until an acceptably working version that supports all the planned features is available. Then it may be used to write patches if and when issues arise. 
 
