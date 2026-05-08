@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -65,68 +66,81 @@ func upsertDeployment(ctx context.Context, c client.Client, desired appsv1.Deplo
 // podTemplateChanged compares only the fields we set — ignores k8s-injected defaults
 func podTemplateChanged(existing, desired corev1.PodTemplateSpec) bool {
 	if len(existing.Spec.Containers) != len(desired.Spec.Containers) {
+		fmt.Printf("[kube-deploy] templateChanged: container count %d vs %d\n",
+			len(existing.Spec.Containers), len(desired.Spec.Containers))
 		return true
 	}
 	for i := range desired.Spec.Containers {
 		e := existing.Spec.Containers[i]
 		d := desired.Spec.Containers[i]
 		if e.Image != d.Image {
+			fmt.Printf("[kube-deploy] templateChanged: image %q vs %q\n", e.Image, d.Image)
 			return true
 		}
 		if e.Name != d.Name {
+			fmt.Printf("[kube-deploy] templateChanged: name %q vs %q\n", e.Name, d.Name)
 			return true
 		}
 		if !envEqual(e.Env, d.Env) {
+			fmt.Printf("[kube-deploy] templateChanged: env\n")
 			return true
 		}
 		if !commandEqual(e.Command, d.Command) {
+			fmt.Printf("[kube-deploy] templateChanged: command %v vs %v\n", e.Command, d.Command)
 			return true
 		}
 		if !commandEqual(e.Args, d.Args) {
+			fmt.Printf("[kube-deploy] templateChanged: args %v vs %v\n", e.Args, d.Args)
 			return true
 		}
 		if !portsEqual(e.Ports, d.Ports) {
+			fmt.Printf("[kube-deploy] templateChanged: ports\n")
 			return true
 		}
-		// Only compare resource limits/requests if we actually set them
 		if len(d.Resources.Limits) > 0 || len(d.Resources.Requests) > 0 {
 			if !resourcesEqual(e.Resources, d.Resources) {
+				fmt.Printf("[kube-deploy] templateChanged: resources\n")
 				return true
 			}
 		}
-		// Only compare probes if we actually set them (non-nil in desired)
 		if d.ReadinessProbe != nil {
 			if e.ReadinessProbe == nil {
+				fmt.Printf("[kube-deploy] templateChanged: readinessProbe nil\n")
 				return true
 			}
 			if !probeEqual(e.ReadinessProbe, d.ReadinessProbe) {
+				fmt.Printf("[kube-deploy] templateChanged: readinessProbe handler\n")
 				return true
 			}
 		}
 		if d.LivenessProbe != nil {
 			if e.LivenessProbe == nil {
+				fmt.Printf("[kube-deploy] templateChanged: livenessProbe nil\n")
 				return true
 			}
 			if !probeEqual(e.LivenessProbe, d.LivenessProbe) {
+				fmt.Printf("[kube-deploy] templateChanged: livenessProbe handler\n")
 				return true
 			}
 		}
-		// Ignore VolumeMounts added by Kubernetes (e.g. service account token)
 		if !desiredVolumeMountsPresent(e.VolumeMounts, d.VolumeMounts) {
+			fmt.Printf("[kube-deploy] templateChanged: volumeMounts\n")
 			return true
 		}
 	}
-	// Only check volumes we defined, ignore k8s-injected ones
 	if !desiredVolumesPresent(existing.Spec.Volumes, desired.Spec.Volumes) {
+		fmt.Printf("[kube-deploy] templateChanged: volumes\n")
 		return true
 	}
-	// ServiceAccountName
 	if desired.Spec.ServiceAccountName != "" &&
 		existing.Spec.ServiceAccountName != desired.Spec.ServiceAccountName {
+		fmt.Printf("[kube-deploy] templateChanged: serviceAccountName %q vs %q\n",
+			existing.Spec.ServiceAccountName, desired.Spec.ServiceAccountName)
 		return true
 	}
-	// HostNetwork
 	if existing.Spec.HostNetwork != desired.Spec.HostNetwork {
+		fmt.Printf("[kube-deploy] templateChanged: hostNetwork %v vs %v\n",
+			existing.Spec.HostNetwork, desired.Spec.HostNetwork)
 		return true
 	}
 	return false
