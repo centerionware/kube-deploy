@@ -359,6 +359,36 @@ spec:
 
 The local insecure registry (`localhost:31999`) requires no secret — `registry.insecure=true` is set automatically when `build.registrySecret` is not specified.
 
+## Generic literally any resource available to the cluster
+
+```
+spec:
+  resources:
+    - apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-ingress
+      spec:
+        podSelector:
+          matchLabels:
+            app: myapp
+        ingress:
+          - {}
+    - apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      metadata:
+        name: myapp-metrics
+      spec:
+        selector:
+          matchLabels:
+            app: myapp
+        endpoints:
+          - port: metrics
+```
+
+Server-side apply means it's idempotent — safe to reconcile repeatedly. The operator owns them via the kube-deploy/app label and deletes them when the App is removed.
+
+
 ## Use of AI Disclaimer
 
 ChatGPT was originally used to generate the skeleton of this project. Claude Sonnet 4.6 was used to get it into its current state. 

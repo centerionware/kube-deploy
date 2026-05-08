@@ -1,6 +1,8 @@
 package v1alpha1
 
 import (
+	"encoding/json"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -42,15 +44,19 @@ func (in *AppList) DeepCopyObject() runtime.Object {
 }
 
 type AppSpec struct {
-	Repo           string            `json:"repo"`
-	UpdateInterval string            `json:"updateInterval,omitempty"`
-	Env            map[string]string `json:"env,omitempty"`
-	Build          BuildSpec         `json:"build,omitempty"`
-	Run            RunSpec           `json:"run,omitempty"`
-	Service        ServiceSpec       `json:"service,omitempty"`
-	Ingress        *IngressSpec      `json:"ingress,omitempty"`
-	Gateway        *GatewaySpec      `json:"gateway,omitempty"`
-	RBAC           *RBACSpec         `json:"rbac,omitempty"`
+	Repo           string              `json:"repo"`
+	UpdateInterval string              `json:"updateInterval,omitempty"`
+	Env            map[string]string   `json:"env,omitempty"`
+	Build          BuildSpec           `json:"build,omitempty"`
+	Run            RunSpec             `json:"run,omitempty"`
+	Service        ServiceSpec         `json:"service,omitempty"`
+	Ingress        *IngressSpec        `json:"ingress,omitempty"`
+	Gateway        *GatewaySpec        `json:"gateway,omitempty"`
+	RBAC           *RBACSpec           `json:"rbac,omitempty"`
+	// Resources is a list of raw Kubernetes objects to apply alongside the app.
+	// Accepts any valid Kubernetes manifest — native resources or CRDs.
+	// Objects are labeled for ownership and cleaned up on App deletion.
+	Resources      []json.RawMessage   `json:"resources,omitempty"`
 }
 
 // ----------------------------------------------------------------
@@ -84,13 +90,15 @@ func (in *ContainerAppList) DeepCopyObject() runtime.Object {
 }
 
 type ContainerAppSpec struct {
-	Image   string            `json:"image"`
-	Env     map[string]string `json:"env,omitempty"`
-	Run     RunSpec           `json:"run,omitempty"`
-	Service ServiceSpec       `json:"service,omitempty"`
-	Ingress *IngressSpec      `json:"ingress,omitempty"`
-	Gateway *GatewaySpec      `json:"gateway,omitempty"`
-	RBAC    *RBACSpec         `json:"rbac,omitempty"`
+	Image     string            `json:"image"`
+	Env       map[string]string `json:"env,omitempty"`
+	Run       RunSpec           `json:"run,omitempty"`
+	Service   ServiceSpec       `json:"service,omitempty"`
+	Ingress   *IngressSpec      `json:"ingress,omitempty"`
+	Gateway   *GatewaySpec      `json:"gateway,omitempty"`
+	RBAC      *RBACSpec         `json:"rbac,omitempty"`
+	// Resources is a list of raw Kubernetes objects to apply alongside the app.
+	Resources []json.RawMessage `json:"resources,omitempty"`
 }
 
 type ContainerAppStatus struct {
@@ -121,6 +129,25 @@ type BuildSpec struct {
 	Registry       string   `json:"registry,omitempty"`
 	GitSecret      string   `json:"gitSecret,omitempty"`
 	RegistrySecret string   `json:"registrySecret,omitempty"`
+
+	// Resources controls CPU/memory for the build job containers.
+	// Tune to trade build speed for cluster resource pressure.
+	Resources BuildResourceSpec `json:"resources,omitempty"`
+}
+
+// BuildResourceSpec defines resource requests/limits for build job containers
+type BuildResourceSpec struct {
+	// BuildKit container (the actual image build — most resource intensive)
+	CPURequest    string `json:"cpuRequest,omitempty"`
+	MemoryRequest string `json:"memoryRequest,omitempty"`
+	CPULimit      string `json:"cpuLimit,omitempty"`
+	MemoryLimit   string `json:"memoryLimit,omitempty"`
+
+	// Git clone container limits
+	CloneCPURequest    string `json:"cloneCpuRequest,omitempty"`
+	CloneMemoryRequest string `json:"cloneMemoryRequest,omitempty"`
+	CloneCPULimit      string `json:"cloneCpuLimit,omitempty"`
+	CloneMemoryLimit   string `json:"cloneMemoryLimit,omitempty"`
 }
 
 // ----------------------------------------------------------------
@@ -362,4 +389,7 @@ type AppStatus struct {
 	Image      string `json:"image,omitempty"`
 	Commit     string `json:"commit,omitempty"`
 	LastUpdate string `json:"lastUpdate,omitempty"`
+	// PendingCommit holds a commit that arrived while a build was in progress.
+	// The operator will start building it immediately when the current job finishes.
+	PendingCommit string `json:"pendingCommit,omitempty"`
 }

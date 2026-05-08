@@ -56,8 +56,14 @@ rules:
     verbs: ["*"]
 
   - apiGroups: ["rbac.authorization.k8s.io"]
-    resources: ["roles", "rolebindings", "clusterrolebindings"]
+    resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
     verbs: ["*"]
+
+  # Generic resources â€” operator applies arbitrary manifests on behalf of apps
+  # This grants broad access; scope down if your threat model requires it
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 ---
 

@@ -34,11 +34,56 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, boo
 		pullRegistry = defaultPullRegistry
 	}
 
+	// Already on this commit and healthy — nothing to do
 	if app.Status.Commit == commit &&
 		app.Status.Phase == "Ready" &&
-		strings.HasPrefix(app.Status.Image, pullRegistry) {
+		strings.HasPrefix(app.Status.Image, pullRegistry) &&
+		app.Status.PendingCommit == "" {
 		log.Info("already up to date, skipping build", "commit", commit, "image", app.Status.Image)
 		return app.Status.Image, true, nil
+	}
+
+	// Check if any build job is currently active for this app
+	var jobList batchv1.JobList
+	if err := c.List(ctx, &jobList,
+		client.InNamespace(app.Namespace),
+		client.MatchingLabels{"kube-deploy/app": app.Name},
+	); err != nil {
+		return "", false, fmt.Errorf("listing build jobs: %w", err)
+	}
+
+	for _, job := range jobList.Items {
+		if job.Status.Active > 0 {
+			// A build is running — queue the new commit if it's different
+			if commit != app.Status.Commit && commit != app.Status.PendingCommit {
+				log.Info("build active, queuing new commit",
+					"activeJob", job.Name,
+					"queuedCommit", commit[:7],
+				)
+				app.Status.PendingCommit = commit
+				if err := c.Status().Update(ctx, app); err != nil {
+					log.Error(err, "failed to store pending commit")
+				}
+			} else {
+				log.Info("build active, waiting for completion", "activeJob", job.Name)
+			}
+			return "", false, nil
+		}
+
+		// Job just finished — check if we have a pending commit to build next
+		if (job.Status.Succeeded > 0 || job.Status.Failed > 0) && app.Status.PendingCommit != "" {
+			log.Info("build finished, pending commit found — starting next build",
+				"finishedJob", job.Name,
+				"nextCommit", app.Status.PendingCommit[:7],
+			)
+			// Promote pending to current target
+			commit = app.Status.PendingCommit
+			app.Status.PendingCommit = ""
+			if err := c.Status().Update(ctx, app); err != nil {
+				log.Error(err, "failed to clear pending commit")
+			}
+			break
+		}
 	}
 
 	if app.Status.Commit != commit {
@@ -81,6 +126,12 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, boo
 	if job.Status.Failed > 0 {
 		log.Error(nil, "build job failed", "job", jobName, "failures", job.Status.Failed)
 		updateStatus(ctx, c, app, "Failed", commit, "")
+		// If there's a pending commit, try building that next
+		if app.Status.PendingCommit != "" {
+			log.Info("build failed but pending commit exists, will retry with pending",
+				"pendingCommit", app.Status.PendingCommit[:7],
+			)
+		}
 		return "", false, fmt.Errorf("build job %s failed", jobName)
 	}
 

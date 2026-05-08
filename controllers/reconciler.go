@@ -81,6 +81,14 @@ func (r *AppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 	if !ready {
+		// If there's a pending commit, requeue immediately so we start
+		// the next build as soon as the current job finishes
+		if app.Status.PendingCommit != "" {
+			log.Info("build not ready but pending commit queued, requeuing fast",
+				"pendingCommit", app.Status.PendingCommit,
+			)
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
 		log.Info("build not ready, requeuing", "repo", app.Spec.Repo)
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
@@ -161,6 +169,10 @@ func (r *AppReconciler) cleanup(ctx context.Context, app *v1.App) error {
 				log.Error(err, "failed to delete job", "job", job.Name)
 			}
 		}
+	}
+
+	if err := cleanupResources(ctx, r.Client, app); err != nil {
+		log.Error(err, "generic resources cleanup failed (best-effort)")
 	}
 
 	if err := cleanupRBAC(ctx, r.Client, app); err != nil {

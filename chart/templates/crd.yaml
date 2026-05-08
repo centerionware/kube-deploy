@@ -32,6 +32,9 @@ spec:
         - name: Image
           type: string
           jsonPath: .status.image
+        - name: Pending
+          type: string
+          jsonPath: .status.pendingCommit
         - name: Age
           type: date
           jsonPath: .metadata.creationTimestamp
@@ -90,6 +93,34 @@ spec:
                       type: string
                       default: ""
                       description: "Complete Dockerfile content. Only used when dockerfileMode is inline."
+                    resources:
+                      type: object
+                      description: "Resource limits for build job containers. Tune to trade build speed for cluster resource pressure."
+                      properties:
+                        cpuRequest:
+                          type: string
+                          default: "500m"
+                        memoryRequest:
+                          type: string
+                          default: "512Mi"
+                        cpuLimit:
+                          type: string
+                          default: "2"
+                        memoryLimit:
+                          type: string
+                          default: "4Gi"
+                        cloneCpuRequest:
+                          type: string
+                          default: "100m"
+                        cloneMemoryRequest:
+                          type: string
+                          default: "128Mi"
+                        cloneCpuLimit:
+                          type: string
+                          default: "500m"
+                        cloneMemoryLimit:
+                          type: string
+                          default: "512Mi"
                 run:
                   type: object
                   default: {}
@@ -447,6 +478,13 @@ spec:
                       description: "Names of EXISTING ClusterRoles to bind to the ServiceAccount e.g. [cluster-admin]"
                       items:
                         type: string
+                resources:
+                  type: array
+                  description: "Raw Kubernetes objects to apply alongside the app. Accepts any valid manifest — native resources or installed CRDs."
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+
             status:
               type: object
               x-kubernetes-preserve-unknown-fields: true
@@ -857,6 +895,13 @@ spec:
                       description: "Names of EXISTING ClusterRoles to bind to the ServiceAccount e.g. [cluster-admin]"
                       items:
                         type: string
+                resources:
+                  type: array
+                  description: "Raw Kubernetes objects to apply alongside the app. Accepts any valid manifest — native resources or installed CRDs."
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+
             status:
               type: object
               x-kubernetes-preserve-unknown-fields: true
