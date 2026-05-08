@@ -188,7 +188,10 @@ func EnsureRuntime(ctx context.Context, c client.Client, app *v1.App, image stri
 		log.Error(err, "failed to ensure HPA")
 		return err
 	}
-
+    if err := EnsureResources(ctx, c, app); err != nil {
+        log.Error(err, "failed to apply generic resources")
+        return err
+    }
 	return nil
 }
 
