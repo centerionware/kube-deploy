@@ -95,11 +95,33 @@ func (r *ContainerAppReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 func (r *ContainerAppReconciler) cleanup(ctx context.Context, app *v1.ContainerApp) error {
 	log := log.FromContext(ctx).WithValues("containerapp", app.Name, "namespace", app.Namespace)
-	synthetic := &v1.App{ObjectMeta: app.ObjectMeta}
+
+	// Build a full synthetic App so cleanupRuntime can clean up everything
+	// including generic resources, RBAC, and PVCs
+	synthetic := &v1.App{
+		ObjectMeta: app.ObjectMeta,
+		Spec: v1.AppSpec{
+			Run:       app.Spec.Run,
+			RBAC:      app.Spec.RBAC,
+			Resources: app.Spec.Resources,
+		},
+	}
+
 	if err := cleanupRuntime(ctx, r.Client, synthetic); err != nil {
 		log.Error(err, "runtime cleanup failed")
 		return err
 	}
+
+	// Clean up generic resources explicitly
+	if err := cleanupResources(ctx, r.Client, synthetic); err != nil {
+		log.Error(err, "generic resources cleanup failed (best-effort)")
+	}
+
+	// Clean up RBAC
+	if err := cleanupRBAC(ctx, r.Client, synthetic); err != nil {
+		log.Error(err, "RBAC cleanup failed (best-effort)")
+	}
+
 	log.Info("ContainerApp cleanup complete")
 	return nil
 }
