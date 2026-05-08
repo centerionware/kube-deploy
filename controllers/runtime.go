@@ -101,9 +101,13 @@ func EnsureRuntime(ctx context.Context, c client.Client, app *v1.App, image stri
 		}
 	}
 
+	// Merge ImagePullSecret (singular) and ImagePullSecrets (plural) into one list
 	var imagePullSecrets []corev1.LocalObjectReference
 	if app.Spec.Run.ImagePullSecret != "" {
-		imagePullSecrets = []corev1.LocalObjectReference{{Name: app.Spec.Run.ImagePullSecret}}
+		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: app.Spec.Run.ImagePullSecret})
+	}
+	for _, s := range app.Spec.Run.ImagePullSecrets {
+		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: s})
 	}
 
 	log.Info("upserting deployment", "image", image, "port", port, "replicas", replicas)

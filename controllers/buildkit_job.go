@@ -28,7 +28,6 @@ func ensureBuildJob(ctx context.Context, c client.Client, app *v1.App, name stri
 	return nil
 }
 
-// dockerfileMode returns the resolved mode, defaulting to "auto"
 func dockerfileMode(app *v1.App) string {
 	switch app.Spec.Build.DockerfileMode {
 	case "generate", "inline":
@@ -44,8 +43,68 @@ func buildJob(app *v1.App, name string, image string) batchv1.Job {
 		"kube-deploy/namespace": app.Namespace,
 	}
 
-	// Build the init containers based on dockerfile mode
-	initContainers := buildInitContainers(app)
+	// Base volumes — workspace always present
+	volumes := []corev1.Volume{
+		{
+			Name: "workspace",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+	}
+
+	// If a registry push secret is specified, mount it as a docker config
+	// BuildKit reads ~/.docker/config.json for registry auth
+	buildkitVolumeMounts := []corev1.VolumeMount{
+		{Name: "workspace", MountPath: "/workspace"},
+	}
+
+	var buildkitEnv []corev1.EnvVar
+
+	if app.Spec.Build.RegistrySecret != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: "registry-auth",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: app.Spec.Build.RegistrySecret,
+					Items: []corev1.KeyToPath{
+						{
+							Key:  ".dockerconfigjson",
+							Path: "config.json",
+						},
+					},
+				},
+			},
+		})
+		buildkitVolumeMounts = append(buildkitVolumeMounts, corev1.VolumeMount{
+			Name:      "registry-auth",
+			MountPath: "/root/.docker",
+			ReadOnly:  true,
+		})
+	}
+
+	// Build the buildctl args
+	buildctlArgs := []string{
+		"--addr", "tcp://buildkit-buildkit-service.buildkit.svc.cluster.local:1234",
+		"build",
+		"--frontend", "dockerfile.v0",
+		"--local", "context=/workspace",
+		"--local", "dockerfile=/workspace",
+		"--opt", "filename=Dockerfile",
+	}
+
+	// Output — insecure for local registry, normal for authenticated remote
+	if app.Spec.Build.RegistrySecret != "" {
+		// Authenticated push — don't set insecure flag
+		buildctlArgs = append(buildctlArgs,
+			"--output", fmt.Sprintf("type=image,name=%s,push=true", image),
+		)
+	} else {
+		// Local insecure registry
+		buildctlArgs = append(buildctlArgs,
+			"--output", fmt.Sprintf("type=image,name=%s,push=true,registry.insecure=true", image),
+		)
+	}
 
 	return batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -59,32 +118,16 @@ func buildJob(app *v1.App, name string, image string) batchv1.Job {
 				ObjectMeta: metav1.ObjectMeta{Labels: jobLabels},
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
-					Volumes: []corev1.Volume{
-						{
-							Name: "workspace",
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-					},
-					InitContainers: initContainers,
+					Volumes:       volumes,
+					InitContainers: buildInitContainers(app),
 					Containers: []corev1.Container{
 						{
-							Name:    "buildkit",
-							Image:   "moby/buildkit:latest",
-							Command: []string{"buildctl"},
-							Args: []string{
-								"--addr", "tcp://buildkit-buildkit-service.buildkit.svc.cluster.local:1234",
-								"build",
-								"--frontend", "dockerfile.v0",
-								"--local", "context=/workspace",
-								"--local", "dockerfile=/workspace",
-								"--opt", "filename=Dockerfile",
-								"--output", fmt.Sprintf("type=image,name=%s,push=true,registry.insecure=true", image),
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{Name: "workspace", MountPath: "/workspace"},
-							},
+							Name:         "buildkit",
+							Image:        "moby/buildkit:latest",
+							Command:      []string{"buildctl"},
+							Args:         buildctlArgs,
+							Env:          buildkitEnv,
+							VolumeMounts: buildkitVolumeMounts,
 						},
 					},
 				},
@@ -96,7 +139,6 @@ func buildJob(app *v1.App, name string, image string) batchv1.Job {
 func buildInitContainers(app *v1.App) []corev1.Container {
 	mode := dockerfileMode(app)
 
-	// Step 1: always clone the repo
 	cloneContainer := corev1.Container{
 		Name:  "git-clone",
 		Image: "alpine/git",
@@ -111,7 +153,6 @@ func buildInitContainers(app *v1.App) []corev1.Container {
 
 	switch mode {
 	case "inline":
-		// Use the Dockerfile provided directly in the spec — overwrite anything in the repo
 		return []corev1.Container{
 			cloneContainer,
 			{
@@ -128,7 +169,6 @@ func buildInitContainers(app *v1.App) []corev1.Container {
 		}
 
 	case "generate":
-		// Always use the built-in generator — overwrite any Dockerfile in the repo
 		dockerfile := generateDockerfile(*app)
 		return []corev1.Container{
 			cloneContainer,
@@ -146,7 +186,6 @@ func buildInitContainers(app *v1.App) []corev1.Container {
 		}
 
 	default: // "auto"
-		// Use the repo's Dockerfile if it exists, otherwise generate one
 		dockerfile := generateDockerfile(*app)
 		return []corev1.Container{
 			cloneContainer,

@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: livekit-config
+  namespace: apps
+data:
+  config.yaml: |
+    port: 7880
+
+    rtc:
+      tcp_port: 7881
+      port_range_start: 50000
+      port_range_end: 60000
+      # Set to your node's NetBird VPN IP if auto-detect picks the wrong interface
+      # node_ip: 100.64.x.x
+      use_external_ip: false
+
+    keys:
+      devkey: devsecret   # CHANGE â€” format is "keyname: secret"
+
+    logging:
+      level: info
+      json: false
+
+    turn:
+      enabled: false

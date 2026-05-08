@@ -1,5 +1,5 @@
 # ============================================================
-# App CRD â€” build from source and deploy
+# App CRD — build from source and deploy
 # ============================================================
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -80,6 +80,7 @@ spec:
                       type: string
                     registrySecret:
                       type: string
+                      description: "Secret of type kubernetes.io/dockerconfigjson for authenticating push to a private registry"
                     dockerfileMode:
                       type: string
                       default: "auto"
@@ -114,6 +115,12 @@ spec:
                       default: "localhost:31999"
                     imagePullSecret:
                       type: string
+                      description: "Single Secret name for pulling from a private registry"
+                    imagePullSecrets:
+                      type: array
+                      description: "List of Secret names for pulling from multiple private registries"
+                      items:
+                        type: string
                     hostNetwork:
                       type: boolean
                       default: false
@@ -363,7 +370,7 @@ spec:
                         type: string
                 rbac:
                   type: object
-                  description: "Full RBAC chain â€” creates ServiceAccount, Roles, ClusterRoles and bindings"
+                  description: "Full RBAC chain — creates ServiceAccount, Roles, ClusterRoles and bindings"
                   properties:
                     serviceAccountName:
                       type: string
@@ -446,7 +453,7 @@ spec:
 
 ---
 # ============================================================
-# ContainerApp CRD â€” deploy pre-built images directly
+# ContainerApp CRD — deploy pre-built images directly
 # ============================================================
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -518,6 +525,12 @@ spec:
                       default: "localhost:31999"
                     imagePullSecret:
                       type: string
+                      description: "Single Secret name for pulling from a private registry"
+                    imagePullSecrets:
+                      type: array
+                      description: "List of Secret names for pulling from multiple private registries"
+                      items:
+                        type: string
                     hostNetwork:
                       type: boolean
                       default: false
@@ -767,7 +780,7 @@ spec:
                         type: string
                 rbac:
                   type: object
-                  description: "Full RBAC chain â€” creates ServiceAccount, Roles, ClusterRoles and bindings"
+                  description: "Full RBAC chain — creates ServiceAccount, Roles, ClusterRoles and bindings"
                   properties:
                     serviceAccountName:
                       type: string

@@ -133,7 +133,9 @@ type RunSpec struct {
 	Port            int              `json:"port,omitempty"`
 	Replicas        int              `json:"replicas,omitempty"`
 	Registry        string           `json:"registry,omitempty"`
-	ImagePullSecret string           `json:"imagePullSecret,omitempty"`
+	ImagePullSecret  string   `json:"imagePullSecret,omitempty"`
+	// ImagePullSecrets is a list of Secret names for pulling from multiple private registries
+	ImagePullSecrets []string `json:"imagePullSecrets,omitempty"`
 	HostNetwork     bool             `json:"hostNetwork,omitempty"`
 	// ServiceAccountName to use for the pod. If rbac is set, defaults to app name.
 	ServiceAccountName string          `json:"serviceAccountName,omitempty"`
