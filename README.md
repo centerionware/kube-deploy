@@ -213,7 +213,7 @@ kubectl patch svc registry -n registry \
 | Full service override | ✅ Implemented |
 | ContainerApp CRD | ✅ Implemented |
 | Registry image cleanup on delete | ✅ Implemented |
-| Registry auth | 🔲 Planned |
+| Registry auth | ✅ Implemented |
 | Canary / rollback | 🔲 Planned |
 | Test coverage | 🔲 Planned |
 
@@ -322,6 +322,42 @@ rbac:
 
 This creates: a ServiceAccount named livekit, a Role livekit-configmap-reader + RoleBinding, a ClusterRole kube-deploy-livekit-livekit-node-reader + ClusterRoleBinding, and binds the existing view ClusterRole — all cleaned up on deletion.
 
+## Registry Authentication
+
+### Push (build stage)
+
+Create a `kubernetes.io/dockerconfigjson` secret in the same namespace as the App:
+
+```bash
+kubectl create secret docker-registry my-registry-push \
+  -n my-namespace \
+  --docker-server=ghcr.io \
+  --docker-username=myuser \
+  --docker-password=mytoken
+```
+
+Reference it in the build spec:
+
+```yaml
+spec:
+  build:
+    registry: ghcr.io/myorg
+    registrySecret: my-registry-push
+```
+
+### Pull (runtime stage)
+
+Same secret type, referenced in the run spec. Supports multiple registries:
+
+```yaml
+spec:
+  run:
+    imagePullSecrets:
+      - my-registry-pull
+      - another-registry-secret
+```
+
+The local insecure registry (`localhost:31999`) requires no secret — `registry.insecure=true` is set automatically when `build.registrySecret` is not specified.
 
 ## Use of AI Disclaimer
 
