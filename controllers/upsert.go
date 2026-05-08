@@ -42,23 +42,27 @@ func upsertDeployment(ctx context.Context, c client.Client, desired appsv1.Deplo
 		desiredReplicas = *desired.Spec.Replicas
 	}
 
-	podSpecChanged := existingImage != desiredImage ||
-		existingReplicas != desiredReplicas ||
-		podTemplateChanged(existing.Spec.Template, desired.Spec.Template)
+	imageChanged := existingImage != desiredImage
+	replicasChanged := existingReplicas != desiredReplicas
+	templateChanged := podTemplateChanged(existing.Spec.Template, desired.Spec.Template)
 
-	if !podSpecChanged {
+	if !imageChanged && !replicasChanged && !templateChanged {
 		log.Info("deployment unchanged, skipping update")
 		return nil
 	}
 
-	log.Info("deployment changed, updating")
+	log.Info("deployment changed, updating",
+		"imageChanged", imageChanged,
+		"replicasChanged", replicasChanged,
+		"templateChanged", templateChanged,
+	)
 	existing.Spec.Replicas = desired.Spec.Replicas
 	existing.Spec.Template = desired.Spec.Template
 	existing.Labels = desired.Labels
 	return c.Update(ctx, &existing)
 }
 
-// podTemplateChanged compares the fields we control in the pod template
+// podTemplateChanged compares only the fields we set — ignores k8s-injected defaults
 func podTemplateChanged(existing, desired corev1.PodTemplateSpec) bool {
 	if len(existing.Spec.Containers) != len(desired.Spec.Containers) {
 		return true
@@ -75,23 +79,113 @@ func podTemplateChanged(existing, desired corev1.PodTemplateSpec) bool {
 		if !envEqual(e.Env, d.Env) {
 			return true
 		}
-		if !resourcesEqual(e.Resources, d.Resources) {
-			return true
-		}
-		if !portsEqual(e.Ports, d.Ports) {
-			return true
-		}
 		if !commandEqual(e.Command, d.Command) {
 			return true
 		}
 		if !commandEqual(e.Args, d.Args) {
 			return true
 		}
+		if !portsEqual(e.Ports, d.Ports) {
+			return true
+		}
+		// Only compare resource limits/requests if we actually set them
+		if len(d.Resources.Limits) > 0 || len(d.Resources.Requests) > 0 {
+			if !resourcesEqual(e.Resources, d.Resources) {
+				return true
+			}
+		}
+		// Only compare probes if we actually set them (non-nil in desired)
+		if d.ReadinessProbe != nil {
+			if e.ReadinessProbe == nil {
+				return true
+			}
+			if !probeEqual(e.ReadinessProbe, d.ReadinessProbe) {
+				return true
+			}
+		}
+		if d.LivenessProbe != nil {
+			if e.LivenessProbe == nil {
+				return true
+			}
+			if !probeEqual(e.LivenessProbe, d.LivenessProbe) {
+				return true
+			}
+		}
+		// Ignore VolumeMounts added by Kubernetes (e.g. service account token)
+		if !desiredVolumeMountsPresent(e.VolumeMounts, d.VolumeMounts) {
+			return true
+		}
 	}
-	if !volumesEqual(existing.Spec.Volumes, desired.Spec.Volumes) {
+	// Only check volumes we defined, ignore k8s-injected ones
+	if !desiredVolumesPresent(existing.Spec.Volumes, desired.Spec.Volumes) {
+		return true
+	}
+	// ServiceAccountName
+	if desired.Spec.ServiceAccountName != "" &&
+		existing.Spec.ServiceAccountName != desired.Spec.ServiceAccountName {
+		return true
+	}
+	// HostNetwork
+	if existing.Spec.HostNetwork != desired.Spec.HostNetwork {
 		return true
 	}
 	return false
+}
+
+// probeEqual compares only the handler type and key fields, ignoring k8s-defaulted timing fields
+func probeEqual(a, b *corev1.Probe) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	// Compare handler type
+	if (a.HTTPGet == nil) != (b.HTTPGet == nil) {
+		return false
+	}
+	if a.HTTPGet != nil && b.HTTPGet != nil {
+		if a.HTTPGet.Path != b.HTTPGet.Path || a.HTTPGet.Port != b.HTTPGet.Port {
+			return false
+		}
+	}
+	if (a.TCPSocket == nil) != (b.TCPSocket == nil) {
+		return false
+	}
+	if a.TCPSocket != nil && b.TCPSocket != nil {
+		if a.TCPSocket.Port != b.TCPSocket.Port {
+			return false
+		}
+	}
+	return true
+}
+
+// desiredVolumeMountsPresent checks that all mounts we want are present, ignoring extra k8s-injected ones
+func desiredVolumeMountsPresent(existing, desired []corev1.VolumeMount) bool {
+	existingMap := make(map[string]string, len(existing))
+	for _, m := range existing {
+		existingMap[m.Name] = m.MountPath
+	}
+	for _, d := range desired {
+		if existingMap[d.Name] != d.MountPath {
+			return false
+		}
+	}
+	return true
+}
+
+// desiredVolumesPresent checks that all volumes we want are present, ignoring extra k8s-injected ones
+func desiredVolumesPresent(existing, desired []corev1.Volume) bool {
+	existingMap := make(map[string]bool, len(existing))
+	for _, v := range existing {
+		existingMap[v.Name] = true
+	}
+	for _, d := range desired {
+		if !existingMap[d.Name] {
+			return false
+		}
+	}
+	return true
 }
 
 func envEqual(a, b []corev1.EnvVar) bool {
@@ -140,18 +234,6 @@ func commandEqual(a, b []string) bool {
 	}
 	for i := range a {
 		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func volumesEqual(a, b []corev1.Volume) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i].Name != b[i].Name {
 			return false
 		}
 	}
