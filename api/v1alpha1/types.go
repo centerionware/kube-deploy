@@ -163,7 +163,10 @@ type RunSpec struct {
 	ImagePullSecret  string   `json:"imagePullSecret,omitempty"`
 	// ImagePullSecrets is a list of Secret names for pulling from multiple private registries
 	ImagePullSecrets []string `json:"imagePullSecrets,omitempty"`
-	HostNetwork     bool             `json:"hostNetwork,omitempty"`
+	HostNetwork          bool             `json:"hostNetwork,omitempty"`
+	// EnableServiceLinks injects service env vars into the pod. Disable when using
+	// large port ranges to avoid hitting ARG_MAX. Default: true (k8s default)
+	EnableServiceLinks  *bool            `json:"enableServiceLinks,omitempty"`
 	// ServiceAccountName to use for the pod. If rbac is set, defaults to app name.
 	ServiceAccountName string          `json:"serviceAccountName,omitempty"`
 	Resources       ResourceSpec     `json:"resources,omitempty"`

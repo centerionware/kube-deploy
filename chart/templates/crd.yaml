@@ -155,6 +155,10 @@ spec:
                     hostNetwork:
                       type: boolean
                       default: false
+                    enableServiceLinks:
+                      type: boolean
+                      default: false
+                      description: "Disable to prevent k8s injecting service env vars into pod. Required when using large port ranges."
                     resources:
                       type: object
                       properties:
@@ -572,6 +576,10 @@ spec:
                     hostNetwork:
                       type: boolean
                       default: false
+                    enableServiceLinks:
+                      type: boolean
+                      default: false
+                      description: "Disable to prevent k8s injecting service env vars into pod. Required when using large port ranges."
                     resources:
                       type: object
                       properties:

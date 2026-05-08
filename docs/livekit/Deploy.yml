@@ -7,8 +7,10 @@ spec:
   image: livekit/livekit-server:latest
 
   run:
+    command: ["--config", "/etc/livekit/config.yaml"]
     port: 7880
     replicas: 1
+    enableServiceLinks: false
 
     resources:
       cpuRequest: 100m
@@ -24,9 +26,6 @@ spec:
           items:
             - key: config.yaml
               path: config.yaml
-
-  env:
-    LIVEKIT_CONFIG: /etc/livekit/config.yaml
 
   service:
     type: ClusterIP
