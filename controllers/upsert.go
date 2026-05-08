@@ -97,11 +97,10 @@ func podTemplateChanged(existing, desired corev1.PodTemplateSpec) bool {
 			fmt.Printf("[kube-deploy] templateChanged: ports\n")
 			return true
 		}
-		if len(d.Resources.Limits) > 0 || len(d.Resources.Requests) > 0 {
-			if !resourcesEqual(e.Resources, d.Resources) {
-				fmt.Printf("[kube-deploy] templateChanged: resources\n")
-				return true
-			}
+		// Only compare the specific resource values we set, not k8s-defaulted ones
+		if !setResourcesEqual(e.Resources, d.Resources) {
+			fmt.Printf("[kube-deploy] templateChanged: resources\n")
+			return true
 		}
 		if d.ReadinessProbe != nil {
 			if e.ReadinessProbe == nil {
@@ -225,6 +224,26 @@ func resourcesEqual(a, b corev1.ResourceRequirements) bool {
 		}
 		if a.Limits[r] != b.Limits[r] {
 			return false
+		}
+	}
+	return true
+}
+
+// setResourcesEqual only compares resource values that were explicitly set in desired.
+// If desired has no CPU limit set, we don't compare CPU limits — k8s may have injected one.
+func setResourcesEqual(existing, desired corev1.ResourceRequirements) bool {
+	for _, r := range []corev1.ResourceName{corev1.ResourceCPU, corev1.ResourceMemory} {
+		if dv, ok := desired.Requests[r]; ok {
+			ev := existing.Requests[r]
+			if ev.Cmp(dv) != 0 {
+				return false
+			}
+		}
+		if dv, ok := desired.Limits[r]; ok {
+			ev := existing.Limits[r]
+			if ev.Cmp(dv) != 0 {
+				return false
+			}
 		}
 	}
 	return true

@@ -63,11 +63,13 @@ func (r *ContainerAppReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	synthetic := &v1.App{
 		ObjectMeta: app.ObjectMeta,
 		Spec: v1.AppSpec{
-			Env:     app.Spec.Env,
-			Run:     app.Spec.Run,
-			Service: app.Spec.Service,
-			Ingress: app.Spec.Ingress,
-			Gateway: app.Spec.Gateway,
+			Env:       app.Spec.Env,
+			Run:       app.Spec.Run,
+			Service:   app.Spec.Service,
+			Ingress:   app.Spec.Ingress,
+			Gateway:   app.Spec.Gateway,
+			RBAC:      app.Spec.RBAC,
+			Resources: app.Spec.Resources,
 		},
 	}
 
