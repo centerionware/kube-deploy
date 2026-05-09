@@ -132,10 +132,10 @@ func EnsureRuntime(ctx context.Context, c client.Client, app *v1.App, image stri
 					Volumes:           volumes,
 					Containers: []corev1.Container{
 						{
-							Name:           "app",
-							Image:          image,
-							Command:        app.Spec.Run.Command,
-							Args:           app.Spec.Run.Args,
+							Name:    "app",
+							Image:   image,
+							Command: nullIfEmpty(app.Spec.Run.Command),
+							Args:    nullIfEmpty(app.Spec.Run.Args),
 							Env:            buildEnv(app.Spec.Env),
 							Resources:      resources,
 							VolumeMounts:   volumeMounts,

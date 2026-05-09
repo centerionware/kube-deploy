@@ -1,0 +1,45 @@
+apiVersion: kube-deploy.centerionware.app/v1alpha1
+kind: App
+metadata:
+  name: dashboard
+  namespace: livekit-dashboard
+spec:
+  repo: https://github.com/thinhdanggroup/livekit-dashboard
+
+  build:
+    dockerfileMode: auto
+    registry: registry.registry.svc.cluster.local:5000
+
+  run:
+    port: 8000
+    enableServiceLinks: false
+
+    resources:
+      cpuRequest: 500m
+      memoryRequest: 256Mi
+      cpuLimit: "1"
+      memoryLimit: 512Mi
+
+    healthCheck:
+      path: /health
+
+  env:
+    LIVEKIT_URL: "http://livekit.livekit.svc.cluster.local:7880"
+    LIVEKIT_API_KEY: "devkey"
+    LIVEKIT_API_SECRET: "devsecret"
+    ADMIN_USERNAME: "admin"
+    ADMIN_PASSWORD: "admin"
+    APP_SECRET_KEY: "dev-secret-key-change-in-production"
+    ENABLE_SIP: "true"
+    DEBUG: "false"
+    HOST: "0.0.0.0"
+    PORT: "8000"
+
+  service:
+    ports:
+      - port: 80
+        targetPort: 8000
+        protocol: TCP
+    annotations:
+      netbird.io/expose: "true"
+      netbird.io/groups: "media"

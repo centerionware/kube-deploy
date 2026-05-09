@@ -20,3 +20,12 @@ func buildEnv(env map[string]string) []corev1.EnvVar {
 func must(v string) resource.Quantity {
 	return resource.MustParse(v)
 }
+
+// nullIfEmpty returns nil if the slice is empty, otherwise returns the slice.
+// Used for Command/Args so an empty array doesn't override the container's CMD/ENTRYPOINT.
+func nullIfEmpty(s []string) []string {
+	if len(s) == 0 {
+		return nil
+	}
+	return s
+}

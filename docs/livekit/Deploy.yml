@@ -7,7 +7,7 @@ spec:
   image: livekit/livekit-server:latest
 
   run:
-    command: ["--config", "/etc/livekit/config.yaml"]
+    command: ["/livekit-server", "--config", "/etc/livekit/config.yaml"]
     port: 7880
     replicas: 1
     enableServiceLinks: false
@@ -40,7 +40,7 @@ spec:
         protocol: TCP
     portRanges:
       - start: 50000
-        end: 60000
+        end: 50200
         protocol: UDP
     annotations:
       netbird.io/expose: "true"
@@ -59,7 +59,7 @@ spec:
           rtc:
             tcp_port: 7881
             port_range_start: 50000
-            port_range_end: 60000
+            port_range_end: 50200
             use_external_ip: false
 
           keys:
