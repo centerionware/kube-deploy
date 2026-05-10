@@ -1,3 +1,5 @@
+### kubectl compose 
+
 # kube-deploy
 
 A lightweight Kubernetes operator that builds and deploys applications directly from git repositories — no Dockerfiles, no Helm charts, no manual image management required.
