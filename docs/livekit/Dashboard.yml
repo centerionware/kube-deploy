@@ -11,6 +11,7 @@ spec:
     registry: registry.registry.svc.cluster.local:5000
 
   run:
+    command: []
     port: 8000
     enableServiceLinks: false
 

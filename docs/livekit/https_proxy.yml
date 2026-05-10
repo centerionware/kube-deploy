@@ -1,0 +1,100 @@
+apiVersion: kube-deploy.centerionware.app/v1alpha1
+kind: ContainerApp
+metadata:
+  name: proxy
+  namespace: livekit-meet-proxy
+spec:
+  image: nginx:alpine
+
+  run:
+    command: []
+    port: 443
+    enableServiceLinks: false
+
+    resources:
+      cpuRequest: 50m
+      memoryRequest: 32Mi
+      cpuLimit: 200m
+      memoryLimit: 128Mi
+
+    volumes:
+      - name: nginx-config
+        mountPath: /etc/nginx/conf.d
+        configMap:
+          name: nginx-config
+          items:
+            - key: default.conf
+              path: default.conf
+      - name: tls-cert
+        mountPath: /etc/nginx/tls
+        secret:
+          secretName: meet-tls
+
+  service:
+    ports:
+      - name: https
+        port: 443
+        targetPort: 443
+        protocol: TCP
+      - name: http
+        port: 80
+        targetPort: 80
+        protocol: TCP
+    annotations:
+      netbird.io/expose: "true"
+      netbird.io/groups: "media"
+
+  resources:
+    - apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: livekit-meet-proxy
+
+    - apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: meet-centerionware-com
+        namespace: livekit-meet-proxy
+      spec:
+        secretName: meet-tls
+        issuerRef:
+          name: cloudflare-dns
+          kind: ClusterIssuer
+        dnsNames:
+          - meet.centerionware.com
+
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: nginx-config
+        namespace: livekit-meet-proxy
+      data:
+        default.conf: |
+          server {
+            listen 80;
+            server_name meet.centerionware.com;
+            return 301 https://$host$request_uri;
+          }
+
+          server {
+            listen 443 ssl;
+            server_name meet.centerionware.com;
+
+            ssl_certificate     /etc/nginx/tls/tls.crt;
+            ssl_certificate_key /etc/nginx/tls/tls.key;
+            ssl_protocols       TLSv1.2 TLSv1.3;
+            ssl_ciphers         HIGH:!aNULL:!MD5;
+
+            location / {
+              proxy_pass         http://meet.livekit-meet.svc.cluster.local:80;
+              proxy_http_version 1.1;
+              proxy_set_header   Upgrade $http_upgrade;
+              proxy_set_header   Connection "upgrade";
+              proxy_set_header   Host $host;
+              proxy_set_header   X-Real-IP $remote_addr;
+              proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header   X-Forwarded-Proto https;
+              proxy_read_timeout 3600s;
+              proxy_send_timeout 3600s;
+            }
+          }

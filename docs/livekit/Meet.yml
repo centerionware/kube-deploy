@@ -1,0 +1,24 @@
+apiVersion: kube-deploy.centerionware.app/v1alpha1
+kind: App
+metadata:
+  name: meet
+  namespace: livekit-meet
+spec:
+  repo: https://github.com/livekit-examples/meet
+
+  run:
+    port: 3000
+
+  env:
+    LIVEKIT_API_KEY: "devkey"
+    LIVEKIT_API_SECRET: "devsecret"
+    LIVEKIT_URL: "ws://livekit.livekit.svc.cluster.local:7880"
+
+  service:
+    ports:
+      - port: 80
+        targetPort: 3000
+        protocol: TCP
+    annotations:
+      netbird.io/expose: "true"
+      netbird.io/groups: "media"

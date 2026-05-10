@@ -43,7 +43,7 @@ apiVersion: kube-deploy.centerionware.app/v1alpha1
 kind: App
 metadata:
   name: meet
-  namespace: kube-deploy
+  namespace: livekit-meet
 spec:
   repo: https://github.com/livekit-examples/meet
 
@@ -51,9 +51,9 @@ spec:
     port: 3000
 
   env:
-    LIVEKIT_API_KEY: "your-key"
-    LIVEKIT_API_SECRET: "your-secret"
-    LIVEKIT_URL: "ws://your-livekit-url"
+    LIVEKIT_API_KEY: "devkey"
+    LIVEKIT_API_SECRET: "devsecret"
+    LIVEKIT_URL: "ws://livekit.livekit.svc.cluster.local:7880"
 
   service:
     ports:

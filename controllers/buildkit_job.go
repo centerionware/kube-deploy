@@ -7,6 +7,7 @@ import (
 	v1 "kube-deploy/api/v1alpha1"
 
 	batchv1 "k8s.io/api/batch/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -128,6 +129,7 @@ func buildJob(app *v1.App, name string, image string) batchv1.Job {
 							Args:         buildctlArgs,
 							Env:          buildkitEnv,
 							VolumeMounts: buildkitVolumeMounts,
+							Resources:    buildResources(app.Spec.Build.Resources),
 						},
 					},
 				},
@@ -139,16 +141,18 @@ func buildJob(app *v1.App, name string, image string) batchv1.Job {
 func buildInitContainers(app *v1.App) []corev1.Container {
 	mode := dockerfileMode(app)
 
+	branch := resolveBranch(app)
 	cloneContainer := corev1.Container{
 		Name:  "git-clone",
 		Image: "alpine/git",
 		Command: []string{
 			"sh", "-c",
-			fmt.Sprintf("git clone --depth=1 %s /workspace", app.Spec.Repo),
+			fmt.Sprintf("git clone --depth=1 --branch %s %s /workspace", branch, app.Spec.Repo),
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "workspace", MountPath: "/workspace"},
 		},
+		Resources: cloneResources(app.Spec.Build.Resources),
 	}
 
 	switch mode {
@@ -211,5 +215,70 @@ fi`,
 				},
 			},
 		}
+	}
+}
+
+// buildResources returns resource requirements for the buildkit container.
+// Falls back to conservative defaults to prevent OOM on the node.
+func buildResources(r v1.BuildResourceSpec) corev1.ResourceRequirements {
+	cpuReq := "500m"
+	memReq := "512Mi"
+	cpuLim := "2"
+	memLim := "4Gi"
+
+	if r.CPURequest != "" {
+		cpuReq = r.CPURequest
+	}
+	if r.MemoryRequest != "" {
+		memReq = r.MemoryRequest
+	}
+	if r.CPULimit != "" {
+		cpuLim = r.CPULimit
+	}
+	if r.MemoryLimit != "" {
+		memLim = r.MemoryLimit
+	}
+
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(cpuReq),
+			corev1.ResourceMemory: resource.MustParse(memReq),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(cpuLim),
+			corev1.ResourceMemory: resource.MustParse(memLim),
+		},
+	}
+}
+
+// cloneResources returns resource requirements for the git-clone init container.
+func cloneResources(r v1.BuildResourceSpec) corev1.ResourceRequirements {
+	cpuReq := "100m"
+	memReq := "128Mi"
+	cpuLim := "500m"
+	memLim := "512Mi"
+
+	if r.CloneCPURequest != "" {
+		cpuReq = r.CloneCPURequest
+	}
+	if r.CloneMemoryRequest != "" {
+		memReq = r.CloneMemoryRequest
+	}
+	if r.CloneCPULimit != "" {
+		cpuLim = r.CloneCPULimit
+	}
+	if r.CloneMemoryLimit != "" {
+		memLim = r.CloneMemoryLimit
+	}
+
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(cpuReq),
+			corev1.ResourceMemory: resource.MustParse(memReq),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse(cpuLim),
+			corev1.ResourceMemory: resource.MustParse(memLim),
+		},
 	}
 }

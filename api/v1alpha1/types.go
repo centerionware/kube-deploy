@@ -116,6 +116,9 @@ type BuildSpec struct {
 	InstallCmd     string   `json:"installCmd,omitempty"`
 	BuildCmd       string   `json:"buildCmd,omitempty"`
 
+	// Branch to build from. Defaults to "main"
+	Branch string `json:"branch,omitempty"`
+
 	// DockerfileMode controls how the Dockerfile is sourced:
 	//   auto     (default) — use repo Dockerfile if present, else generate
 	//   generate — always use the built-in generator

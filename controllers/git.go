@@ -18,6 +18,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// resolveBranch returns the branch to build from, defaulting to "main"
+func resolveBranch(app *v1.App) string {
+	if app.Spec.Build.Branch != "" {
+		return app.Spec.Build.Branch
+	}
+	return "main"
+}
+
 func getLatestCommit(ctx context.Context, c client.Client, app *v1.App) (string, error) {
 	auth, err := resolveGitAuth(ctx, c, app)
 	if err != nil {
@@ -34,6 +42,27 @@ func getLatestCommit(ctx context.Context, c client.Client, app *v1.App) (string,
 		return "", fmt.Errorf("listing remote refs for %s: %w", app.Spec.Repo, err)
 	}
 
+	branch := resolveBranch(app)
+	targetRef := plumbing.NewBranchReferenceName(branch)
+
+	// Look for the specific branch directly
+	for _, ref := range refs {
+		if ref.Name() == targetRef {
+			return ref.Hash().String(), nil
+		}
+	}
+
+	// If branch not found and it's "main", fall back to "master" for older repos
+	if branch == "main" {
+		masterRef := plumbing.NewBranchReferenceName("master")
+		for _, ref := range refs {
+			if ref.Name() == masterRef {
+				return ref.Hash().String(), nil
+			}
+		}
+	}
+
+	// Fall back to HEAD symref resolution
 	var headTarget plumbing.ReferenceName
 	for _, ref := range refs {
 		if ref.Name() == plumbing.HEAD {
@@ -48,13 +77,14 @@ func getLatestCommit(ctx context.Context, c client.Client, app *v1.App) (string,
 		}
 	}
 
+	// Detached HEAD fallback
 	for _, ref := range refs {
 		if ref.Name() == plumbing.HEAD && !ref.Hash().IsZero() {
 			return ref.Hash().String(), nil
 		}
 	}
 
-	return "", fmt.Errorf("could not resolve HEAD for %s", app.Spec.Repo)
+	return "", fmt.Errorf("could not resolve branch %q for %s", branch, app.Spec.Repo)
 }
 
 func resolveGitAuth(ctx context.Context, c client.Client, app *v1.App) (transport.AuthMethod, error) {
