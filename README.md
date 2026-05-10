@@ -5,6 +5,12 @@ A lightweight Kubernetes operator that builds and deploys applications directly 
 Think of it as a self-hosted Vercel or Cloudflare Workers, purpose-built for k3s clusters.
 
 ---
+i realized today that the ingress, half of the volume things, the httproute, can be simply removed because of the generic resources. 
+i think immediately and before widespread use this must happen so things are simplified.
+im leaving them in for now because i cant be arsed myself to do it and fix the examples.
+
+
+---
 
 ## Why
 
