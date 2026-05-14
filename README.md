@@ -19,7 +19,7 @@ The problem is worse than it sounds:
 - Pre-built images are often x86-only, leaving ARM and RISC-V users to fend for themselves
 - Build infrastructure (CI runners, registries, artifact stores) is expensive to operate and fragile to maintain
 
-kube-deploy collapses the entire build-push-deploy pipeline into a single CRD. Point it at a git repository, and it handles the rest: clones the source, generates a Dockerfile if one isn't present, builds a multi-arch image using an in-cluster BuildKit daemon, pushes to a local registry, and creates the Deployment and Service. It polls for new commits and rebuilds automatically.
+kube-deploy collapses the entire build-push-deploy pipeline into a single CRD. Point it at a git repository, and it handles the rest: clones the source, generates a Dockerfile if one isn't present, builds an image using an in-cluster BuildKit daemon, pushes to a local registry, and creates the Deployment and Service. It polls for new commits and rebuilds automatically.
 
 ---
 
@@ -224,9 +224,7 @@ kubectl patch svc registry -n registry \
 ## Todo
 
 - [ ] Write full test coverage (unit + integration) for all controllers
-- [ ] Registry push authentication (`build.registrySecret`)
 - [ ] Canary deployments and rollback support
-- [ ] Multi-branch tracking (deploy specific branches per CR)
 - [ ] Webhook-triggered reconcile (skip polling, react to push events)
 
 
