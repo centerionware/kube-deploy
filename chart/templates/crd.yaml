@@ -1,5 +1,5 @@
 # ============================================================
-# App CRD — build from source and deploy
+# App CRD â€” build from source and deploy
 # ============================================================
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -79,6 +79,10 @@ spec:
                     registry:
                       type: string
                       default: "registry.registry.svc.cluster.local:5000"
+                    branch:
+                      type: string
+                      default: "main"
+                      description: "Git branch to build from. Defaults to main, falls back to master for older repos."
                     gitSecret:
                       type: string
                     registrySecret:
@@ -129,7 +133,7 @@ spec:
                       type: array
                       items:
                         type: string
-                      default: ["npm", "start"]
+                      default: []
                     args:
                       type: array
                       items:
@@ -405,7 +409,7 @@ spec:
                         type: string
                 rbac:
                   type: object
-                  description: "Full RBAC chain — creates ServiceAccount, Roles, ClusterRoles and bindings"
+                  description: "Full RBAC chain â€” creates ServiceAccount, Roles, ClusterRoles and bindings"
                   properties:
                     serviceAccountName:
                       type: string
@@ -484,7 +488,7 @@ spec:
                         type: string
                 resources:
                   type: array
-                  description: "Raw Kubernetes objects to apply alongside the app. Accepts any valid manifest — native resources or installed CRDs."
+                  description: "Raw Kubernetes objects to apply alongside the app. Accepts any valid manifest â€” native resources or installed CRDs."
                   items:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
@@ -495,7 +499,7 @@ spec:
 
 ---
 # ============================================================
-# ContainerApp CRD — deploy pre-built images directly
+# ContainerApp CRD â€” deploy pre-built images directly
 # ============================================================
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -826,7 +830,7 @@ spec:
                         type: string
                 rbac:
                   type: object
-                  description: "Full RBAC chain — creates ServiceAccount, Roles, ClusterRoles and bindings"
+                  description: "Full RBAC chain â€” creates ServiceAccount, Roles, ClusterRoles and bindings"
                   properties:
                     serviceAccountName:
                       type: string
@@ -905,7 +909,7 @@ spec:
                         type: string
                 resources:
                   type: array
-                  description: "Raw Kubernetes objects to apply alongside the app. Accepts any valid manifest — native resources or installed CRDs."
+                  description: "Raw Kubernetes objects to apply alongside the app. Accepts any valid manifest â€” native resources or installed CRDs."
                   items:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
