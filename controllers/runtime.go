@@ -164,35 +164,26 @@ func EnsureRuntime(ctx context.Context, c client.Client, app *v1.App, image stri
 	}
 	log.Info("service upserted", "type", svc.Spec.Type)
 
-	// Always call both — each handles its own cleanup when disabled.
-	// This ensures switching between ingress and gateway cleans up the other.
+	// Deployment and service are fatal — app can't run without them.
+	// Everything below is best-effort — failures are logged but don't block deployment.
+
 	if err := EnsureIngress(ctx, c, app, port); err != nil {
-		log.Error(err, "failed to reconcile ingress")
-		return err
+		log.Error(err, "failed to reconcile ingress (non-fatal)")
 	}
 	if err := EnsureGateway(ctx, c, app, port); err != nil {
-		log.Error(err, "failed to reconcile HTTPRoute")
-		return err
+		log.Error(err, "failed to reconcile HTTPRoute (non-fatal)")
 	}
-
 	if err := EnsureRBAC(ctx, c, app); err != nil {
-		log.Error(err, "failed to ensure service account")
-		return err
+		log.Error(err, "failed to ensure RBAC (non-fatal)")
 	}
-
 	if err := EnsureVolumes(ctx, c, app); err != nil {
-		log.Error(err, "failed to ensure volumes")
-		return err
+		log.Error(err, "failed to ensure volumes (non-fatal)")
 	}
-
 	if err := EnsureHPA(ctx, c, app); err != nil {
-		log.Error(err, "failed to ensure HPA")
-		return err
+		log.Error(err, "failed to ensure HPA (non-fatal)")
 	}
-
 	if err := EnsureResources(ctx, c, app); err != nil {
-		log.Error(err, "failed to apply generic resources")
-		return err
+		log.Error(err, "failed to apply generic resources (non-fatal)")
 	}
 
 	return nil

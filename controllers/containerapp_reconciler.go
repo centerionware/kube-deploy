@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+	"runtime/debug"
 	"time"
 
 	v1 "kube-deploy/api/v1alpha1"
@@ -24,8 +26,22 @@ func SetupContainerApp(mgr ctrl.Manager, r *ContainerAppReconciler) error {
 		Complete(r)
 }
 
-func (r *ContainerAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *ContainerAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := log.FromContext(ctx).WithValues("containerapp", req.NamespacedName)
+
+	// Recover from panics — bad CRs must never crash the worker goroutine
+	defer func() {
+		if rec := recover(); rec != nil {
+			log.Error(fmt.Errorf("panic: %v\n%s", rec, debug.Stack()), "reconcile panicked, recovering")
+			result = ctrl.Result{RequeueAfter: 60 * time.Second}
+			err = nil
+		}
+	}()
+
+	// Per-reconcile timeout
+	ctx, cancel := context.WithTimeout(ctx, reconcileTimeout)
+	defer cancel()
+
 	log.Info("reconcile triggered")
 
 	var app v1.ContainerApp
@@ -37,24 +53,27 @@ func (r *ContainerAppReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
+	// --- Deletion ---
 	if !app.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&app, containerAppFinalizer) {
 			log.Info("ContainerApp deleted, cleaning up")
-			if err := r.cleanup(ctx, &app); err != nil {
-				return ctrl.Result{}, err
+			if cleanupErr := r.cleanup(ctx, &app); cleanupErr != nil {
+				log.Error(cleanupErr, "cleanup failed")
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 			}
 			controllerutil.RemoveFinalizer(&app, containerAppFinalizer)
-			if err := r.Update(ctx, &app); err != nil {
-				return ctrl.Result{}, err
+			if updateErr := r.Update(ctx, &app); updateErr != nil {
+				return ctrl.Result{}, updateErr
 			}
 		}
 		return ctrl.Result{}, nil
 	}
 
+	// --- Finalizer ---
 	if !controllerutil.ContainsFinalizer(&app, containerAppFinalizer) {
 		controllerutil.AddFinalizer(&app, containerAppFinalizer)
-		if err := r.Update(ctx, &app); err != nil {
-			return ctrl.Result{}, err
+		if updateErr := r.Update(ctx, &app); updateErr != nil {
+			return ctrl.Result{}, updateErr
 		}
 	}
 
@@ -73,20 +92,21 @@ func (r *ContainerAppReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		},
 	}
 
-	if err := EnsureRuntime(ctx, r.Client, synthetic, app.Spec.Image); err != nil {
-		log.Error(err, "EnsureRuntime failed", "image", app.Spec.Image)
+	if runtimeErr := EnsureRuntime(ctx, r.Client, synthetic, app.Spec.Image); runtimeErr != nil {
+		log.Error(runtimeErr, "EnsureRuntime failed", "image", app.Spec.Image)
 		app.Status.Phase = "Failed"
-		app.Status.Message = err.Error()
+		app.Status.Message = runtimeErr.Error()
 		app.Status.LastUpdate = time.Now().Format(time.RFC3339)
 		_ = r.Status().Update(ctx, &app)
-		return ctrl.Result{}, err
+		// Non-fatal — requeue with backoff
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
 	app.Status.Phase = "Ready"
 	app.Status.Message = ""
 	app.Status.LastUpdate = time.Now().Format(time.RFC3339)
-	if err := r.Status().Update(ctx, &app); err != nil {
-		log.Error(err, "failed to update status")
+	if statusErr := r.Status().Update(ctx, &app); statusErr != nil {
+		log.Error(statusErr, "failed to update status")
 	}
 
 	log.Info("ContainerApp reconcile complete", "image", app.Spec.Image)
@@ -96,8 +116,6 @@ func (r *ContainerAppReconciler) Reconcile(ctx context.Context, req ctrl.Request
 func (r *ContainerAppReconciler) cleanup(ctx context.Context, app *v1.ContainerApp) error {
 	log := log.FromContext(ctx).WithValues("containerapp", app.Name, "namespace", app.Namespace)
 
-	// Build a full synthetic App so cleanupRuntime can clean up everything
-	// including generic resources, RBAC, and PVCs
 	synthetic := &v1.App{
 		ObjectMeta: app.ObjectMeta,
 		Spec: v1.AppSpec{
@@ -108,16 +126,13 @@ func (r *ContainerAppReconciler) cleanup(ctx context.Context, app *v1.ContainerA
 	}
 
 	if err := cleanupRuntime(ctx, r.Client, synthetic); err != nil {
-		log.Error(err, "runtime cleanup failed")
-		return err
+		log.Error(err, "runtime cleanup failed (best-effort)")
 	}
 
-	// Clean up generic resources explicitly
 	if err := cleanupResources(ctx, r.Client, synthetic); err != nil {
 		log.Error(err, "generic resources cleanup failed (best-effort)")
 	}
 
-	// Clean up RBAC
 	if err := cleanupRBAC(ctx, r.Client, synthetic); err != nil {
 		log.Error(err, "RBAC cleanup failed (best-effort)")
 	}

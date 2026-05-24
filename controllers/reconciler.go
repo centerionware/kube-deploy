@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	v1 "kube-deploy/api/v1alpha1"
@@ -22,6 +23,7 @@ import (
 const (
 	appFinalizer        = "kube-deploy.centerionware.app/finalizer"
 	defaultPollInterval = 1 * time.Minute
+	reconcileTimeout    = 5 * time.Minute
 )
 
 type AppReconciler struct {
@@ -34,8 +36,22 @@ func Setup(mgr ctrl.Manager, r *AppReconciler) error {
 		Complete(r)
 }
 
-func (r *AppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *AppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := log.FromContext(ctx).WithValues("app", req.NamespacedName)
+
+	// Recover from panics so a bad CR never crashes the worker goroutine
+	defer func() {
+		if rec := recover(); rec != nil {
+			log.Error(fmt.Errorf("panic: %v\n%s", rec, debug.Stack()), "reconcile panicked, recovering")
+			result = ctrl.Result{RequeueAfter: 60 * time.Second}
+			err = nil
+		}
+	}()
+
+	// Per-reconcile timeout so a stuck item never blocks the queue indefinitely
+	ctx, cancel := context.WithTimeout(ctx, reconcileTimeout)
+	defer cancel()
+
 	log.Info("reconcile triggered")
 
 	var app v1.App
@@ -50,43 +66,43 @@ func (r *AppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	pollInterval := parsePollInterval(app.Spec.UpdateInterval)
 
+	// --- Deletion ---
 	if !app.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&app, appFinalizer) {
 			log.Info("App deleted, running cleanup")
-			if err := r.cleanup(ctx, &app); err != nil {
-				log.Error(err, "cleanup failed")
-				return ctrl.Result{}, err
+			if cleanupErr := r.cleanup(ctx, &app); cleanupErr != nil {
+				log.Error(cleanupErr, "cleanup failed")
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 			}
 			controllerutil.RemoveFinalizer(&app, appFinalizer)
-			if err := r.Update(ctx, &app); err != nil {
-				return ctrl.Result{}, err
+			if updateErr := r.Update(ctx, &app); updateErr != nil {
+				return ctrl.Result{}, updateErr
 			}
 		}
 		return ctrl.Result{}, nil
 	}
 
+	// --- Finalizer ---
 	if !controllerutil.ContainsFinalizer(&app, appFinalizer) {
 		log.Info("adding finalizer")
 		controllerutil.AddFinalizer(&app, appFinalizer)
-		if err := r.Update(ctx, &app); err != nil {
-			return ctrl.Result{}, err
+		if updateErr := r.Update(ctx, &app); updateErr != nil {
+			return ctrl.Result{}, updateErr
 		}
 	}
 
 	log.Info("fetched App", "repo", app.Spec.Repo, "phase", app.Status.Phase)
 
-	image, ready, err := EnsureBuild(ctx, r.Client, &app)
-	if err != nil {
-		log.Error(err, "EnsureBuild failed", "repo", app.Spec.Repo)
+	// --- Build ---
+	image, ready, buildErr := EnsureBuild(ctx, r.Client, &app)
+	if buildErr != nil {
+		log.Error(buildErr, "EnsureBuild failed", "repo", app.Spec.Repo)
+		// Non-fatal — requeue with backoff, don't block other CRs
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 	if !ready {
-		// If there's a pending commit, requeue immediately so we start
-		// the next build as soon as the current job finishes
 		if app.Status.PendingCommit != "" {
-			log.Info("build not ready but pending commit queued, requeuing fast",
-				"pendingCommit", app.Status.PendingCommit,
-			)
+			log.Info("build not ready, pending commit queued, requeuing fast")
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		log.Info("build not ready, requeuing", "repo", app.Spec.Repo)
@@ -94,13 +110,16 @@ func (r *AppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 	log.Info("build ready", "image", image)
 
-	if err := EnsureRuntime(ctx, r.Client, &app, image); err != nil {
-		log.Error(err, "EnsureRuntime failed", "image", image)
-		return ctrl.Result{}, err
+	// --- Runtime ---
+	if runtimeErr := EnsureRuntime(ctx, r.Client, &app, image); runtimeErr != nil {
+		log.Error(runtimeErr, "EnsureRuntime failed", "image", image)
+		// Non-fatal — requeue with backoff
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	if err := r.cleanupOldJobs(ctx, &app); err != nil {
-		log.Error(err, "job cleanup failed")
+	// --- Job GC ---
+	if gcErr := r.cleanupOldJobs(ctx, &app); gcErr != nil {
+		log.Error(gcErr, "job cleanup failed (non-fatal)")
 	}
 
 	log.Info("reconcile complete", "image", image, "nextPoll", pollInterval)
