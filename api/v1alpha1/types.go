@@ -170,6 +170,12 @@ type RunSpec struct {
 	// EnableServiceLinks injects service env vars into the pod. Disable when using
 	// large port ranges to avoid hitting ARG_MAX. Default: true (k8s default)
 	EnableServiceLinks  *bool            `json:"enableServiceLinks,omitempty"`
+
+	// SecurityContext sets pod-level security settings
+	SecurityContext *PodSecurityContextSpec `json:"securityContext,omitempty"`
+
+	// ContainerSecurityContext sets container-level security settings
+	ContainerSecurityContext *ContainerSecurityContextSpec `json:"containerSecurityContext,omitempty"`
 	// ServiceAccountName to use for the pod. If rbac is set, defaults to app name.
 	ServiceAccountName string          `json:"serviceAccountName,omitempty"`
 	Resources       ResourceSpec     `json:"resources,omitempty"`
@@ -300,6 +306,38 @@ type RBACRule struct {
 	Verbs     []string `json:"verbs"`
 	// ResourceNames restricts to specific named resources (optional)
 	ResourceNames []string `json:"resourceNames,omitempty"`
+}
+
+// ----------------------------------------------------------------
+// SECURITY CONTEXT
+// ----------------------------------------------------------------
+
+type PodSecurityContextSpec struct {
+	RunAsUser    *int64 `json:"runAsUser,omitempty"`
+	RunAsGroup   *int64 `json:"runAsGroup,omitempty"`
+	RunAsNonRoot *bool  `json:"runAsNonRoot,omitempty"`
+	FSGroup      *int64 `json:"fsGroup,omitempty"`
+}
+
+type ContainerSecurityContextSpec struct {
+	RunAsUser              *int64            `json:"runAsUser,omitempty"`
+	RunAsGroup             *int64            `json:"runAsGroup,omitempty"`
+	RunAsNonRoot           *bool             `json:"runAsNonRoot,omitempty"`
+	ReadOnlyRootFilesystem *bool             `json:"readOnlyRootFilesystem,omitempty"`
+	AllowPrivilegeEscalation *bool           `json:"allowPrivilegeEscalation,omitempty"`
+	Privileged             *bool             `json:"privileged,omitempty"`
+	Capabilities           *CapabilitiesSpec `json:"capabilities,omitempty"`
+	SeccompProfile         *SeccompSpec      `json:"seccompProfile,omitempty"`
+}
+
+type CapabilitiesSpec struct {
+	Add  []string `json:"add,omitempty"`
+	Drop []string `json:"drop,omitempty"`
+}
+
+type SeccompSpec struct {
+	// Type: RuntimeDefault | Unconfined | Localhost
+	Type string `json:"type"`
 }
 
 // ----------------------------------------------------------------

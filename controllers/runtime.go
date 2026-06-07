@@ -129,13 +129,15 @@ func EnsureRuntime(ctx context.Context, c client.Client, app *v1.App, image stri
 					HostNetwork:        app.Spec.Run.HostNetwork,
 					ServiceAccountName: resolveServiceAccountName(app),
 					EnableServiceLinks: app.Spec.Run.EnableServiceLinks,
+					SecurityContext:    buildPodSecurityContext(app),
 					Volumes:           volumes,
 					Containers: []corev1.Container{
 						{
-							Name:    "app",
-							Image:   image,
-							Command: nullIfEmpty(app.Spec.Run.Command),
-							Args:    nullIfEmpty(app.Spec.Run.Args),
+							Name:            "app",
+							Image:           image,
+							Command:         nullIfEmpty(app.Spec.Run.Command),
+							Args:            nullIfEmpty(app.Spec.Run.Args),
+							SecurityContext: buildContainerSecurityContext(app),
 							Env:            buildEnv(app.Spec.Env),
 							Resources:      resources,
 							VolumeMounts:   volumeMounts,
@@ -307,4 +309,66 @@ func resolveServiceAccountName(app *v1.App) string {
 		return app.Name // auto-created SA named after the app
 	}
 	return "" // use default SA
+}
+
+func buildPodSecurityContext(app *v1.App) *corev1.PodSecurityContext {
+	if app.Spec.Run.SecurityContext == nil {
+		return nil
+	}
+	sc := app.Spec.Run.SecurityContext
+	psc := &corev1.PodSecurityContext{}
+	if sc.RunAsUser != nil {
+		psc.RunAsUser = sc.RunAsUser
+	}
+	if sc.RunAsGroup != nil {
+		psc.RunAsGroup = sc.RunAsGroup
+	}
+	if sc.RunAsNonRoot != nil {
+		psc.RunAsNonRoot = sc.RunAsNonRoot
+	}
+	if sc.FSGroup != nil {
+		psc.FSGroup = sc.FSGroup
+	}
+	return psc
+}
+
+func buildContainerSecurityContext(app *v1.App) *corev1.SecurityContext {
+	if app.Spec.Run.ContainerSecurityContext == nil {
+		return nil
+	}
+	sc := app.Spec.Run.ContainerSecurityContext
+	csc := &corev1.SecurityContext{}
+	if sc.RunAsUser != nil {
+		csc.RunAsUser = sc.RunAsUser
+	}
+	if sc.RunAsGroup != nil {
+		csc.RunAsGroup = sc.RunAsGroup
+	}
+	if sc.RunAsNonRoot != nil {
+		csc.RunAsNonRoot = sc.RunAsNonRoot
+	}
+	if sc.ReadOnlyRootFilesystem != nil {
+		csc.ReadOnlyRootFilesystem = sc.ReadOnlyRootFilesystem
+	}
+	if sc.AllowPrivilegeEscalation != nil {
+		csc.AllowPrivilegeEscalation = sc.AllowPrivilegeEscalation
+	}
+	if sc.Privileged != nil {
+		csc.Privileged = sc.Privileged
+	}
+	if sc.Capabilities != nil {
+		caps := &corev1.Capabilities{}
+		for _, c := range sc.Capabilities.Add {
+			caps.Add = append(caps.Add, corev1.Capability(c))
+		}
+		for _, c := range sc.Capabilities.Drop {
+			caps.Drop = append(caps.Drop, corev1.Capability(c))
+		}
+		csc.Capabilities = caps
+	}
+	if sc.SeccompProfile != nil {
+		t := corev1.SeccompProfileType(sc.SeccompProfile.Type)
+		csc.SeccompProfile = &corev1.SeccompProfile{Type: t}
+	}
+	return csc
 }

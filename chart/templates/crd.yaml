@@ -1,5 +1,5 @@
 # ============================================================
-# App CRD â€” build from source and deploy
+# App CRD — build from source and deploy
 # ============================================================
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -163,6 +163,52 @@ spec:
                       type: boolean
                       default: false
                       description: "Disable to prevent k8s injecting service env vars into pod. Required when using large port ranges."
+                    securityContext:
+                      type: object
+                      description: "Pod-level security context"
+                      properties:
+                        runAsUser:
+                          type: integer
+                        runAsGroup:
+                          type: integer
+                        runAsNonRoot:
+                          type: boolean
+                        fsGroup:
+                          type: integer
+                    containerSecurityContext:
+                      type: object
+                      description: "Container-level security context"
+                      properties:
+                        runAsUser:
+                          type: integer
+                        runAsGroup:
+                          type: integer
+                        runAsNonRoot:
+                          type: boolean
+                        readOnlyRootFilesystem:
+                          type: boolean
+                        allowPrivilegeEscalation:
+                          type: boolean
+                        privileged:
+                          type: boolean
+                        capabilities:
+                          type: object
+                          properties:
+                            add:
+                              type: array
+                              items:
+                                type: string
+                            drop:
+                              type: array
+                              items:
+                                type: string
+                        seccompProfile:
+                          type: object
+                          required: ["type"]
+                          properties:
+                            type:
+                              type: string
+                              enum: ["RuntimeDefault", "Unconfined", "Localhost"]
                     resources:
                       type: object
                       properties:
@@ -409,7 +455,7 @@ spec:
                         type: string
                 rbac:
                   type: object
-                  description: "Full RBAC chain â€” creates ServiceAccount, Roles, ClusterRoles and bindings"
+                  description: "Full RBAC chain — creates ServiceAccount, Roles, ClusterRoles and bindings"
                   properties:
                     serviceAccountName:
                       type: string
@@ -488,7 +534,7 @@ spec:
                         type: string
                 resources:
                   type: array
-                  description: "Raw Kubernetes objects to apply alongside the app. Accepts any valid manifest â€” native resources or installed CRDs."
+                  description: "Raw Kubernetes objects to apply alongside the app. Accepts any valid manifest — native resources or installed CRDs."
                   items:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
@@ -499,7 +545,7 @@ spec:
 
 ---
 # ============================================================
-# ContainerApp CRD â€” deploy pre-built images directly
+# ContainerApp CRD — deploy pre-built images directly
 # ============================================================
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -584,6 +630,52 @@ spec:
                       type: boolean
                       default: false
                       description: "Disable to prevent k8s injecting service env vars into pod. Required when using large port ranges."
+                    securityContext:
+                      type: object
+                      description: "Pod-level security context"
+                      properties:
+                        runAsUser:
+                          type: integer
+                        runAsGroup:
+                          type: integer
+                        runAsNonRoot:
+                          type: boolean
+                        fsGroup:
+                          type: integer
+                    containerSecurityContext:
+                      type: object
+                      description: "Container-level security context"
+                      properties:
+                        runAsUser:
+                          type: integer
+                        runAsGroup:
+                          type: integer
+                        runAsNonRoot:
+                          type: boolean
+                        readOnlyRootFilesystem:
+                          type: boolean
+                        allowPrivilegeEscalation:
+                          type: boolean
+                        privileged:
+                          type: boolean
+                        capabilities:
+                          type: object
+                          properties:
+                            add:
+                              type: array
+                              items:
+                                type: string
+                            drop:
+                              type: array
+                              items:
+                                type: string
+                        seccompProfile:
+                          type: object
+                          required: ["type"]
+                          properties:
+                            type:
+                              type: string
+                              enum: ["RuntimeDefault", "Unconfined", "Localhost"]
                     resources:
                       type: object
                       properties:
@@ -830,7 +922,7 @@ spec:
                         type: string
                 rbac:
                   type: object
-                  description: "Full RBAC chain â€” creates ServiceAccount, Roles, ClusterRoles and bindings"
+                  description: "Full RBAC chain — creates ServiceAccount, Roles, ClusterRoles and bindings"
                   properties:
                     serviceAccountName:
                       type: string
@@ -909,7 +1001,7 @@ spec:
                         type: string
                 resources:
                   type: array
-                  description: "Raw Kubernetes objects to apply alongside the app. Accepts any valid manifest â€” native resources or installed CRDs."
+                  description: "Raw Kubernetes objects to apply alongside the app. Accepts any valid manifest — native resources or installed CRDs."
                   items:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
