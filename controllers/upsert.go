@@ -126,6 +126,10 @@ func podTemplateChanged(existing, desired corev1.PodTemplateSpec) bool {
 			fmt.Printf("[kube-deploy] templateChanged: volumeMounts\n")
 			return true
 		}
+		if !containerSecurityContextEqual(e.SecurityContext, d.SecurityContext) {
+			fmt.Printf("[kube-deploy] templateChanged: containerSecurityContext\n")
+			return true
+		}
 	}
 	if !desiredVolumesPresent(existing.Spec.Volumes, desired.Spec.Volumes) {
 		fmt.Printf("[kube-deploy] templateChanged: volumes\n")
@@ -140,6 +144,10 @@ func podTemplateChanged(existing, desired corev1.PodTemplateSpec) bool {
 	if existing.Spec.HostNetwork != desired.Spec.HostNetwork {
 		fmt.Printf("[kube-deploy] templateChanged: hostNetwork %v vs %v\n",
 			existing.Spec.HostNetwork, desired.Spec.HostNetwork)
+		return true
+	}
+	if !podSecurityContextEqual(existing.Spec.SecurityContext, desired.Spec.SecurityContext) {
+		fmt.Printf("[kube-deploy] templateChanged: podSecurityContext\n")
 		return true
 	}
 	return false
@@ -329,4 +337,116 @@ func annotationsEqual(a, b map[string]string) bool {
 		}
 	}
 	return true
+}
+
+func containerSecurityContextEqual(a, b *corev1.SecurityContext) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if !int64PtrEqual(a.RunAsUser, b.RunAsUser) {
+		return false
+	}
+	if !int64PtrEqual(a.RunAsGroup, b.RunAsGroup) {
+		return false
+	}
+	if !boolPtrEqual(a.RunAsNonRoot, b.RunAsNonRoot) {
+		return false
+	}
+	if !boolPtrEqual(a.ReadOnlyRootFilesystem, b.ReadOnlyRootFilesystem) {
+		return false
+	}
+	if !boolPtrEqual(a.AllowPrivilegeEscalation, b.AllowPrivilegeEscalation) {
+		return false
+	}
+	if !boolPtrEqual(a.Privileged, b.Privileged) {
+		return false
+	}
+	if !capabilitiesEqual(a.Capabilities, b.Capabilities) {
+		return false
+	}
+	if !seccompEqual(a.SeccompProfile, b.SeccompProfile) {
+		return false
+	}
+	return true
+}
+
+func podSecurityContextEqual(a, b *corev1.PodSecurityContext) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if !int64PtrEqual(a.RunAsUser, b.RunAsUser) {
+		return false
+	}
+	if !int64PtrEqual(a.RunAsGroup, b.RunAsGroup) {
+		return false
+	}
+	if !boolPtrEqual(a.RunAsNonRoot, b.RunAsNonRoot) {
+		return false
+	}
+	if !int64PtrEqual(a.FSGroup, b.FSGroup) {
+		return false
+	}
+	return true
+}
+
+func capabilitiesEqual(a, b *corev1.Capabilities) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if len(a.Add) != len(b.Add) {
+		return false
+	}
+	for i := range a.Add {
+		if a.Add[i] != b.Add[i] {
+			return false
+		}
+	}
+	if len(a.Drop) != len(b.Drop) {
+		return false
+	}
+	for i := range a.Drop {
+		if a.Drop[i] != b.Drop[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func seccompEqual(a, b *corev1.SeccompProfile) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return a.Type == b.Type
+}
+
+func int64PtrEqual(a, b *int64) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
+}
+
+func boolPtrEqual(a, b *bool) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
 }
