@@ -83,6 +83,11 @@ spec:
                       type: string
                       default: "main"
                       description: "Git branch to build from. Defaults to main, falls back to master for older repos."
+                    buildArgs:
+                      type: object
+                      description: "Build arguments passed to BuildKit as --opt build-arg:KEY=VALUE"
+                      additionalProperties:
+                        type: string
                     gitSecret:
                       type: string
                     registrySecret:

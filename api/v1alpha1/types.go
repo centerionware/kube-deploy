@@ -128,7 +128,9 @@ type BuildSpec struct {
 	// Dockerfile contains a complete Dockerfile, used only when DockerfileMode is "inline"
 	Dockerfile string `json:"dockerfile,omitempty"`
 	Output         string   `json:"output,omitempty"`
-	Args           []string `json:"args,omitempty"`
+	Args           []string          `json:"args,omitempty"`
+	// BuildArgs passes --opt build-arg:KEY=VALUE to BuildKit
+	BuildArgs      map[string]string `json:"buildArgs,omitempty"`
 	Registry       string   `json:"registry,omitempty"`
 	GitSecret      string   `json:"gitSecret,omitempty"`
 	RegistrySecret string   `json:"registrySecret,omitempty"`
