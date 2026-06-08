@@ -36,10 +36,11 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, boo
 		pullRegistry = defaultPullRegistry
 	}
 
-	// Already on this commit and healthy — nothing to do
+	// Already on this commit+dockerfile and healthy — nothing to do
+	expectedImage := resolvePullImage(*app, commit)
 	if app.Status.Commit == commit &&
 		app.Status.Phase == "Ready" &&
-		strings.HasPrefix(app.Status.Image, pullRegistry) &&
+		app.Status.Image == expectedImage &&
 		app.Status.PendingCommit == "" {
 		log.Info("already up to date, skipping build", "commit", commit, "image", app.Status.Image)
 		return app.Status.Image, true, nil
