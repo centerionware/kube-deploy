@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"time"
 
@@ -21,7 +22,8 @@ const (
 func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, bool, error) {
 	log := log.FromContext(ctx).WithValues("app", app.Name, "namespace", app.Namespace)
 
-	log.Info("checking latest commit", "repo", app.Spec.Repo)
+	branch := resolveBranch(app)
+	log.Info("checking latest commit", "repo", app.Spec.Repo, "branch", branch)
 	commit, err := getLatestCommit(ctx, c, app)
 	if err != nil {
 		log.Error(err, "failed to get latest commit", "repo", app.Spec.Repo)
@@ -140,14 +142,27 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, boo
 }
 
 func resolvePushImage(app v1.App, commit string) string {
+	tag := imageTag(app, commit)
 	if app.Spec.Build.Output != "" {
-		return fmt.Sprintf("%s:%s", app.Spec.Build.Output, commit[:7])
+		return fmt.Sprintf("%s:%s", app.Spec.Build.Output, tag)
 	}
 	registry := app.Spec.Build.Registry
 	if registry == "" {
 		registry = defaultBuildRegistry
 	}
-	return fmt.Sprintf("%s/%s/%s:%s", registry, app.Namespace, app.Name, commit[:7])
+	return fmt.Sprintf("%s/%s/%s:%s", registry, app.Namespace, app.Name, tag)
+}
+
+// imageTag returns a tag that includes a dockerfile hash when using inline mode,
+// so changes to the inline dockerfile trigger a new build even with the same git commit.
+func imageTag(app v1.App, commit string) string {
+	base := commit[:7]
+	if app.Spec.Build.DockerfileMode == "inline" && app.Spec.Build.Dockerfile != "" {
+		h := fnv.New32a()
+		h.Write([]byte(app.Spec.Build.Dockerfile))
+		return fmt.Sprintf("%s-df%x", base, h.Sum32())
+	}
+	return base
 }
 
 func resolvePullImage(app v1.App, commit string) string {
