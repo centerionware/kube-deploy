@@ -126,9 +126,12 @@ func podTemplateChanged(existing, desired corev1.PodTemplateSpec) bool {
 			fmt.Printf("[kube-deploy] templateChanged: volumeMounts\n")
 			return true
 		}
-		if !containerSecurityContextEqual(e.SecurityContext, d.SecurityContext) {
-			fmt.Printf("[kube-deploy] templateChanged: containerSecurityContext\n")
-			return true
+		// Only compare container security context if we explicitly set one
+		if d.SecurityContext != nil {
+			if !containerSecurityContextEqual(e.SecurityContext, d.SecurityContext) {
+				fmt.Printf("[kube-deploy] templateChanged: containerSecurityContext\n")
+				return true
+			}
 		}
 	}
 	if !desiredVolumesPresent(existing.Spec.Volumes, desired.Spec.Volumes) {
@@ -146,9 +149,12 @@ func podTemplateChanged(existing, desired corev1.PodTemplateSpec) bool {
 			existing.Spec.HostNetwork, desired.Spec.HostNetwork)
 		return true
 	}
-	if !podSecurityContextEqual(existing.Spec.SecurityContext, desired.Spec.SecurityContext) {
-		fmt.Printf("[kube-deploy] templateChanged: podSecurityContext\n")
-		return true
+	// Only compare pod security context if we explicitly set one
+	if desired.Spec.SecurityContext != nil {
+		if !podSecurityContextEqual(existing.Spec.SecurityContext, desired.Spec.SecurityContext) {
+			fmt.Printf("[kube-deploy] templateChanged: podSecurityContext\n")
+			return true
+		}
 	}
 	return false
 }
