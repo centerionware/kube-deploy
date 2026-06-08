@@ -94,6 +94,11 @@ func buildJob(app *v1.App, name string, image string) batchv1.Job {
 		"--opt", "filename=Dockerfile",
 	}
 
+	// Build args — passed as --opt build-arg:KEY=VALUE
+	for k, v := range app.Spec.Build.BuildArgs {
+		buildctlArgs = append(buildctlArgs, "--opt", fmt.Sprintf("build-arg:%s=%s", k, v))
+	}
+
 	// Output — insecure for local registry, normal for authenticated remote
 	if app.Spec.Build.RegistrySecret != "" {
 		// Authenticated push — don't set insecure flag
