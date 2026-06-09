@@ -102,6 +102,11 @@ spec:
                       type: string
                       default: ""
                       description: "Complete Dockerfile content. Only used when dockerfileMode is inline."
+                    platforms:
+                      type: array
+                      items:
+                        type: string
+                      description: "Target platforms to build for, e.g. [linux/amd64, linux/arm64]. When set, BuildKit produces a multi-arch manifest list. When unset, builds for the daemon's native architecture."
                     resources:
                       type: object
                       description: "Resource limits for build job containers. Tune to trade build speed for cluster resource pressure."

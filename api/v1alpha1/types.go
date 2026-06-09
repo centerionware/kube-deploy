@@ -135,6 +135,11 @@ type BuildSpec struct {
 	GitSecret      string   `json:"gitSecret,omitempty"`
 	RegistrySecret string   `json:"registrySecret,omitempty"`
 
+	// Platforms lists the target platforms to build for, e.g. ["linux/amd64","linux/arm64"].
+	// When set, BuildKit builds a multi-arch manifest list covering all listed platforms.
+	// When unset, the build targets the native architecture of the BuildKit daemon (current default behavior).
+	Platforms []string `json:"platforms,omitempty"`
+
 	// Resources controls CPU/memory for the build job containers.
 	// Tune to trade build speed for cluster resource pressure.
 	Resources BuildResourceSpec `json:"resources,omitempty"`

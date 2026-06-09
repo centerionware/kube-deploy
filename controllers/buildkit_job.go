@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	v1 "kube-deploy/api/v1alpha1"
 
@@ -92,6 +93,11 @@ func buildJob(app *v1.App, name string, image string) batchv1.Job {
 		"--local", "context=/workspace",
 		"--local", "dockerfile=/workspace",
 		"--opt", "filename=Dockerfile",
+	}
+
+	// Multi-platform build — produces a manifest list when set
+	if len(app.Spec.Build.Platforms) > 0 {
+		buildctlArgs = append(buildctlArgs, "--opt", "platform="+joinPlatforms(app.Spec.Build.Platforms))
 	}
 
 	// Build args — passed as --opt build-arg:KEY=VALUE
@@ -254,6 +260,10 @@ func buildResources(r v1.BuildResourceSpec) corev1.ResourceRequirements {
 			corev1.ResourceMemory: resource.MustParse(memLim),
 		},
 	}
+}
+
+func joinPlatforms(platforms []string) string {
+	return strings.Join(platforms, ",")
 }
 
 // cloneResources returns resource requirements for the git-clone init container.

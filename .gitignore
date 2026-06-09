@@ -24,6 +24,9 @@ node_modules/
 # OS specific
 .DS_Store
 
+# Build artifacts
+go.sum
+
 # AI tooling
 .claude/
 .cursor/
