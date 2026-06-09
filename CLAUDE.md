@@ -106,3 +106,7 @@ On CR deletion (driven by the finalizer in the reconcilers), `cleanupRuntime` de
   match the "one bad CR shouldn't block others" pattern already established.
 - `RunSpec`/`ServiceSpec`/etc. are shared between `App` and `ContainerApp` — changes to runtime behavior usually
   belong in the shared helpers (`runtime.go`, `volumes.go`, etc.), not duplicated per-reconciler.
+
+## Task Master AI Instructions
+**Import Task Master's development workflow commands and guidelines, treat as if import is in the main CLAUDE.md file.**
+@./.taskmaster/CLAUDE.md
