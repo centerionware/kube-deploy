@@ -7,6 +7,11 @@ metadata:
 spec:
   replicas: 1
 
+  # Recreate: never run two operator versions side by side. Leader election
+  # guards reconcile correctness, but Recreate avoids the overlap entirely.
+  strategy:
+    type: Recreate
+
   selector:
     matchLabels:
       app: kube-deploy-operator

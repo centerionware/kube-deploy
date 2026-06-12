@@ -36,14 +36,23 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, boo
 		pullRegistry = defaultPullRegistry
 	}
 
-	// Already on this commit+dockerfile and healthy — nothing to do
+	// Already on this commit+dockerfile and healthy — verify the image is
+	// actually still in the registry before trusting status. Registry cleanup
+	// (or a registry pod losing storage) can erase the image out from under a
+	// Ready app, leaving pods unable to restart.
 	expectedImage := resolvePullImage(*app, commit)
+	forceRebuild := false
 	if app.Status.Commit == commit &&
 		app.Status.Phase == "Ready" &&
 		app.Status.Image == expectedImage &&
 		app.Status.PendingCommit == "" {
-		log.Info("already up to date, skipping build", "commit", commit, "image", app.Status.Image)
-		return app.Status.Image, true, nil
+		exists, checked := imageExistsInRegistry(ctx, app, imageTag(*app, commit))
+		if !checked || exists {
+			log.Info("already up to date, skipping build", "commit", commit, "image", app.Status.Image)
+			return app.Status.Image, true, nil
+		}
+		log.Info("image missing from registry, forcing rebuild", "image", expectedImage)
+		forceRebuild = true
 	}
 
 	// Check if any build job is currently active for this app
@@ -98,8 +107,20 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, boo
 
 	pushImage := resolvePushImage(*app, commit)
 	pullImage := resolvePullImage(*app, commit)
-	jobName := fmt.Sprintf("%s-build-%s", app.Name, imageTag(*app, commit))
+	tag := imageTag(*app, commit)
+	jobName := fmt.Sprintf("%s-build-%s", app.Name, tag)
 	log.Info("resolved build target", "pushImage", pushImage, "pullImage", pullImage, "job", jobName)
+
+	// The tag encodes every build input (commit, dockerfile hash, rebuild
+	// epoch) — if the registry already has it, adopt it instead of building.
+	// Status drift must never cause repeat builds of an existing image.
+	if !forceRebuild {
+		if exists, checked := imageExistsInRegistry(ctx, app, tag); checked && exists {
+			log.Info("image already in registry, adopting without rebuild", "image", pullImage)
+			updateStatus(ctx, c, app, "Ready", commit, pullImage)
+			return pullImage, true, nil
+		}
+	}
 
 	var job batchv1.Job
 	err = c.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: jobName}, &job)
@@ -114,6 +135,16 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, boo
 		return "", false, nil
 	}
 
+	// Forced rebuild with a finished job under the same name: the old job
+	// completed but its image is gone — remove it so a fresh build can run.
+	if forceRebuild && (job.Status.Succeeded > 0 || job.Status.Failed > 0) {
+		log.Info("deleting completed job to force rebuild", "job", jobName)
+		if err := c.Delete(ctx, &job, client.PropagationPolicy("Background")); err != nil {
+			log.Error(err, "failed to delete stale job", "job", jobName)
+		}
+		return "", false, nil
+	}
+
 	log.Info("found existing build job", "job", jobName,
 		"succeeded", job.Status.Succeeded,
 		"failed", job.Status.Failed,
@@ -123,6 +154,12 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, boo
 	if job.Status.Succeeded > 0 {
 		log.Info("build succeeded", "job", jobName, "pullImage", pullImage)
 		updateStatus(ctx, c, app, "Ready", commit, pullImage)
+		// The new image is current — drop old tags so the registry only keeps
+		// what's running. Digest-aware: never deletes a manifest the current
+		// tag points to.
+		if err := cleanupOldRegistryTags(ctx, app, tag); err != nil {
+			log.Error(err, "old registry tag cleanup failed (best-effort)")
+		}
 		return pullImage, true, nil
 	}
 

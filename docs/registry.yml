@@ -75,51 +75,43 @@ spec:
   type: NodePort
 ---
 ############################################
-# REGISTRY CLEANUP CRONJOB
+# REGISTRY BLOB GARBAGE COLLECTION
+#
+# Tag cleanup is owned by the kube-deploy operator: after every successful
+# build it deletes the app's old tags (digest-aware, so a manifest shared
+# with the current tag is never removed). Do NOT prune tags here — a previous
+# version of this CronJob sorted tags alphabetically and deleted by digest,
+# which routinely erased the *current* image and left apps unable to pull.
+#
+# This job only reclaims disk from blobs whose manifests were already
+# deleted. Weekly off-hours schedule: GC racing a concurrent image push can
+# corrupt that push, so keep it away from busy build windows.
 ############################################
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: registry-cleanup
+  name: registry-gc
   namespace: registry
 spec:
-  schedule: "0 3 * * *"
+  schedule: "0 4 * * 0"
+  concurrencyPolicy: Forbid
   jobTemplate:
     spec:
       template:
         spec:
           restartPolicy: OnFailure
           containers:
-            - name: cleanup
-              image: alpine:3.20
+            - name: gc
+              image: registry:2
               command:
-                - /bin/sh
-                - -c
-                - |
-                  apk add --no-cache curl jq
-
-                  REGISTRY=http://registry.registry.svc.cluster.local:5000
-
-                  echo "Fetching repositories..."
-                  repos=$(curl -s $REGISTRY/v2/_catalog | jq -r '.repositories[]')
-
-                  for repo in $repos; do
-                    echo "Processing $repo"
-
-                    tags=$(curl -s $REGISTRY/v2/$repo/tags/list | jq -r '.tags[]' | sort -r)
-
-                    delete=$(echo "$tags" | tail -n +4)
-
-                    for tag in $delete; do
-                      echo "Deleting $repo:$tag"
-
-                      digest=$(curl -sI \
-                        -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
-                        $REGISTRY/v2/$repo/manifests/$tag \
-                        | awk '/Docker-Content-Digest/ {print $2}' | tr -d '\r')
-
-                      if [ ! -z "$digest" ]; then
-                        curl -X DELETE $REGISTRY/v2/$repo/manifests/$digest
-                      fi
-                    done
-                  done
+                - registry
+                - garbage-collect
+                - --delete-untagged
+                - /etc/docker/registry/config.yml
+              volumeMounts:
+                - name: data
+                  mountPath: /var/lib/registry
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: registry-pvc

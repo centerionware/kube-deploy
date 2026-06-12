@@ -47,8 +47,15 @@ func main() {
 
 	cfg := ctrl.GetConfigOrDie()
 
+	// Leader election: during rolling updates the old and new operator pods
+	// run concurrently. Without a leader lock both reconcile simultaneously —
+	// if their image-tag logic differs they fight over App status and trigger
+	// builds against each other endlessly.
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: scheme,
+		Scheme:                        scheme,
+		LeaderElection:                true,
+		LeaderElectionID:              "kube-deploy.centerionware.app",
+		LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
 		log.Printf("manager init failed: %v", err)
