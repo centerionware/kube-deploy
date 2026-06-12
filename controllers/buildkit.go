@@ -166,6 +166,10 @@ func imageTag(app v1.App, commit string) string {
 		suffix += fmt.Sprintf("-df%x", h.Sum32())
 	}
 
+	if app.Spec.Build.NoCache {
+		suffix += "-nc"
+	}
+
 	if app.Spec.Build.RebuildInterval != "" {
 		if d, err := time.ParseDuration(app.Spec.Build.RebuildInterval); err == nil && d > 0 {
 			epoch := time.Now().UTC().Truncate(d).Unix()
