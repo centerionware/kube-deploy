@@ -13,6 +13,7 @@ spec:
     dockerfileMode: inline
     branch: master
     registry: registry.registry.svc.cluster.local:5000
+    noCache: true
     buildArgs:
       VARIANT: "full"    # Change to "slim" for smaller image
     resources:
@@ -247,6 +248,7 @@ spec:
     dockerfileMode: inline
     branch: master
     registry: registry.registry.svc.cluster.local:5000
+    noCache: true
     buildArgs:
       VARIANT: "full"    # Change to "slim" for smaller image
     resources:
@@ -409,6 +411,7 @@ spec:
         add: ["SYS_ADMIN", "SYS_PTRACE"]
       seccompProfile:
         type: Unconfined
+
 
     resources:
       cpuRequest: 100m
