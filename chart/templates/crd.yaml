@@ -107,6 +107,14 @@ spec:
                       items:
                         type: string
                       description: "Target platforms to build for, e.g. [linux/amd64, linux/arm64]. When set, BuildKit produces a multi-arch manifest list. When unset, builds for the daemon's native architecture."
+                    rebuildInterval:
+                      type: string
+                      default: ""
+                      description: "Force a full rebuild on this cadence even without new commits. Go duration string, e.g. 24h or 168h. Rebuilds always skip the BuildKit cache."
+                    noCache:
+                      type: boolean
+                      default: false
+                      description: "Disable BuildKit layer caching for all builds. Useful when the Dockerfile installs unpinned packages."
                     resources:
                       type: object
                       description: "Resource limits for build job containers. Tune to trade build speed for cluster resource pressure."

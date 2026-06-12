@@ -217,10 +217,7 @@ func (r *AppReconciler) cleanupOldJobs(ctx context.Context, app *v1.App) error {
 		return err
 	}
 
-	currentJobName := ""
-	if len(app.Status.Commit) >= 7 {
-		currentJobName = fmt.Sprintf("%s-build-%s", app.Name, app.Status.Commit[:7])
-	}
+	currentJobName := jobNameFromImage(app.Name, app.Status.Image)
 
 	propagation := client.PropagationPolicy("Background")
 	for _, job := range jobList.Items {

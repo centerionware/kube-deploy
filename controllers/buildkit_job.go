@@ -100,6 +100,12 @@ func buildJob(app *v1.App, name string, image string) batchv1.Job {
 		buildctlArgs = append(buildctlArgs, "--opt", "platform="+joinPlatforms(app.Spec.Build.Platforms))
 	}
 
+	// Disable BuildKit layer cache when explicitly requested or when running periodic rebuilds.
+	// This ensures package installs always pull fresh upstream versions.
+	if app.Spec.Build.NoCache || app.Spec.Build.RebuildInterval != "" {
+		buildctlArgs = append(buildctlArgs, "--no-cache")
+	}
+
 	// Build args — passed as --opt build-arg:KEY=VALUE
 	for k, v := range app.Spec.Build.BuildArgs {
 		buildctlArgs = append(buildctlArgs, "--opt", fmt.Sprintf("build-arg:%s=%s", k, v))

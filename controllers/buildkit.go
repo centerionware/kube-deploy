@@ -98,7 +98,7 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, boo
 
 	pushImage := resolvePushImage(*app, commit)
 	pullImage := resolvePullImage(*app, commit)
-	jobName := fmt.Sprintf("%s-build-%s", app.Name, commit[:7])
+	jobName := fmt.Sprintf("%s-build-%s", app.Name, imageTag(*app, commit))
 	log.Info("resolved build target", "pushImage", pushImage, "pullImage", pullImage, "job", jobName)
 
 	var job batchv1.Job
@@ -154,16 +154,38 @@ func resolvePushImage(app v1.App, commit string) string {
 	return fmt.Sprintf("%s/%s/%s:%s", registry, app.Namespace, app.Name, tag)
 }
 
-// imageTag returns a tag that includes a dockerfile hash when using inline mode,
-// so changes to the inline dockerfile trigger a new build even with the same git commit.
+// imageTag returns a tag that captures all inputs that should trigger a new build:
+// the commit prefix, an inline-dockerfile hash, and a periodic rebuild epoch.
 func imageTag(app v1.App, commit string) string {
 	base := commit[:7]
+	suffix := ""
+
 	if app.Spec.Build.DockerfileMode == "inline" && app.Spec.Build.Dockerfile != "" {
 		h := fnv.New32a()
 		h.Write([]byte(app.Spec.Build.Dockerfile))
-		return fmt.Sprintf("%s-df%x", base, h.Sum32())
+		suffix += fmt.Sprintf("-df%x", h.Sum32())
 	}
-	return base
+
+	if app.Spec.Build.RebuildInterval != "" {
+		if d, err := time.ParseDuration(app.Spec.Build.RebuildInterval); err == nil && d > 0 {
+			epoch := time.Now().UTC().Truncate(d).Unix()
+			suffix += fmt.Sprintf("-e%d", epoch)
+		}
+	}
+
+	return base + suffix
+}
+
+// jobNameFromImage derives the build job name from the image currently tracked in status.
+// This is the authoritative way to identify the "current" job even when the tag format evolves.
+func jobNameFromImage(appName, image string) string {
+	if image == "" {
+		return ""
+	}
+	if i := strings.LastIndex(image, ":"); i >= 0 {
+		return fmt.Sprintf("%s-build-%s", appName, image[i+1:])
+	}
+	return ""
 }
 
 func resolvePullImage(app v1.App, commit string) string {

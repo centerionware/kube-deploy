@@ -140,6 +140,16 @@ type BuildSpec struct {
 	// When unset, the build targets the native architecture of the BuildKit daemon (current default behavior).
 	Platforms []string `json:"platforms,omitempty"`
 
+	// RebuildInterval forces a full rebuild on this cadence even when the git commit hasn't changed.
+	// Accepts Go duration strings, e.g. "24h", "168h" (weekly).
+	// Each interval produces a new image tag, so the previous image is replaced and the deployment rolls.
+	// Rebuilds always skip the BuildKit cache so package installs pull fresh upstream versions.
+	RebuildInterval string `json:"rebuildInterval,omitempty"`
+
+	// NoCache disables BuildKit layer caching for all builds.
+	// Useful when your Dockerfile installs unpinned packages that benefit from always pulling fresh.
+	NoCache bool `json:"noCache,omitempty"`
+
 	// Resources controls CPU/memory for the build job containers.
 	// Tune to trade build speed for cluster resource pressure.
 	Resources BuildResourceSpec `json:"resources,omitempty"`
