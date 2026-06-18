@@ -97,6 +97,15 @@ func (r *AppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result
 	image, ready, buildErr := EnsureBuild(ctx, r.Client, &app)
 	if buildErr != nil {
 		log.Error(buildErr, "EnsureBuild failed", "repo", app.Spec.Repo)
+		// Surface the failure in status — otherwise a build error (git ref
+		// resolution, job creation, registry, ...) leaves phase/commit/image
+		// blank with the reason only in the logs.
+		app.Status.Phase = "Failed"
+		app.Status.Message = buildErr.Error()
+		app.Status.LastUpdate = time.Now().Format(time.RFC3339)
+		if statusErr := r.Status().Update(ctx, &app); statusErr != nil {
+			log.Error(statusErr, "failed to update status after build error")
+		}
 		// Non-fatal — requeue with backoff, don't block other CRs
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}

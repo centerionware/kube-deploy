@@ -250,6 +250,8 @@ func updateStatus(ctx context.Context, c client.Client, app *v1.App, phase, comm
 	app.Status.Commit = commit
 	app.Status.Image = image
 	app.Status.LastUpdate = time.Now().Format(time.RFC3339)
+	// Clear any prior failure message now that we have a clean phase transition.
+	app.Status.Message = ""
 
 	if err := c.Status().Update(ctx, app); err != nil {
 		log.Error(err, "failed to update status", "phase", phase)

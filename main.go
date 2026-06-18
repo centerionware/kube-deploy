@@ -47,15 +47,15 @@ func main() {
 
 	cfg := ctrl.GetConfigOrDie()
 
-	// Leader election: during rolling updates the old and new operator pods
-	// run concurrently. Without a leader lock both reconcile simultaneously —
-	// if their image-tag logic differs they fight over App status and trigger
-	// builds against each other endlessly.
+	// Single-instance operation is guaranteed by the Deployment itself:
+	// replicas: 1 with strategy: Recreate means the old pod is fully terminated
+	// before the new one starts, so two operator versions never overlap during
+	// a rollout. We deliberately do NOT enable leader election here — for a
+	// single replica it adds no safety, and gating all reconciliation behind
+	// lease acquisition/renewal is a silent-stall risk (a missed renewal stops
+	// the operator from reconciling, which blanks out App/ContainerApp status).
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme:                        scheme,
-		LeaderElection:                true,
-		LeaderElectionID:              "kube-deploy.centerionware.app",
-		LeaderElectionReleaseOnCancel: true,
+		Scheme: scheme,
 	})
 	if err != nil {
 		log.Printf("manager init failed: %v", err)

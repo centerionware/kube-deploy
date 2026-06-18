@@ -7,8 +7,10 @@ metadata:
 spec:
   replicas: 1
 
-  # Recreate: never run two operator versions side by side. Leader election
-  # guards reconcile correctness, but Recreate avoids the overlap entirely.
+  # Recreate + replicas: 1 is what guarantees single-instance operation: the
+  # old pod is fully terminated before the new one starts, so two operator
+  # versions never reconcile concurrently during a rollout (which previously
+  # caused them to fight over App status and rebuild endlessly).
   strategy:
     type: Recreate
 
