@@ -450,6 +450,10 @@ type AppStatus struct {
 	Image      string `json:"image,omitempty"`
 	Commit     string `json:"commit,omitempty"`
 	LastUpdate string `json:"lastUpdate,omitempty"`
+	// Message carries the reason for the current phase — most importantly the
+	// error text when the build phase fails, so failures are visible in status
+	// instead of only in the operator logs.
+	Message string `json:"message,omitempty"`
 	// PendingCommit holds a commit that arrived while a build was in progress.
 	// The operator will start building it immediately when the current job finishes.
 	PendingCommit string `json:"pendingCommit,omitempty"`

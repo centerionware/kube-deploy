@@ -35,6 +35,9 @@ spec:
         - name: Pending
           type: string
           jsonPath: .status.pendingCommit
+        - name: Message
+          type: string
+          jsonPath: .status.message
         - name: Age
           type: date
           jsonPath: .metadata.creationTimestamp
