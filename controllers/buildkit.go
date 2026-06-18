@@ -72,8 +72,9 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, boo
 					"activeJob", job.Name,
 					"queuedCommit", commit[:7],
 				)
-				app.Status.PendingCommit = commit
-				if err := c.Status().Update(ctx, app); err != nil {
+				if err := patchAppStatus(ctx, c, app, func(a *v1.App) {
+					a.Status.PendingCommit = commit
+				}); err != nil {
 					log.Error(err, "failed to store pending commit")
 				}
 			} else {
@@ -90,8 +91,9 @@ func EnsureBuild(ctx context.Context, c client.Client, app *v1.App) (string, boo
 			)
 			// Promote pending to current target
 			commit = app.Status.PendingCommit
-			app.Status.PendingCommit = ""
-			if err := c.Status().Update(ctx, app); err != nil {
+			if err := patchAppStatus(ctx, c, app, func(a *v1.App) {
+				a.Status.PendingCommit = ""
+			}); err != nil {
 				log.Error(err, "failed to clear pending commit")
 			}
 			break
@@ -246,14 +248,29 @@ func updateStatus(ctx context.Context, c client.Client, app *v1.App, phase, comm
 	log := log.FromContext(ctx).WithValues("app", app.Name, "namespace", app.Namespace)
 	log.Info("updating status", "phase", phase, "commit", commit, "image", image)
 
-	app.Status.Phase = phase
-	app.Status.Commit = commit
-	app.Status.Image = image
-	app.Status.LastUpdate = time.Now().Format(time.RFC3339)
-	// Clear any prior failure message now that we have a clean phase transition.
-	app.Status.Message = ""
-
-	if err := c.Status().Update(ctx, app); err != nil {
+	if err := patchAppStatus(ctx, c, app, func(a *v1.App) {
+		a.Status.Phase = phase
+		a.Status.Commit = commit
+		a.Status.Image = image
+		a.Status.LastUpdate = time.Now().Format(time.RFC3339)
+		// Clear any prior failure message now that we have a clean phase transition.
+		a.Status.Message = ""
+	}); err != nil {
 		log.Error(err, "failed to update status", "phase", phase)
 	}
+}
+
+// patchAppStatus applies mutate to the App's status and persists it with a
+// merge Patch rather than an Update. A merge patch does NOT carry the
+// resourceVersion, so it is applied to whatever the server currently holds and
+// can never fail with a 409 conflict. This matters because the manager's
+// client serves reads from a cache: during the rapid back-to-back reconciles
+// of an in-flight (or looping) build, the cached App goes stale, and an
+// Update-based status write 409s and gets silently swallowed — the exact
+// reason phase/commit/image/pending stopped populating. The in-memory app is
+// mutated in place so callers see the new status too.
+func patchAppStatus(ctx context.Context, c client.Client, app *v1.App, mutate func(*v1.App)) error {
+	base := app.DeepCopyObject().(client.Object)
+	mutate(app)
+	return c.Status().Patch(ctx, app, client.MergeFrom(base))
 }
