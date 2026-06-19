@@ -1,0 +1,299 @@
+# HolyClaude (full variant) deployed via kube-deploy.
+#
+# RBAC note: the pod must run as a ServiceAccount that is allowed to manage pods
+# (so the in-container tooling — kubectl, CloudCLI tool-spawner, etc. — can launch
+# pods). This is done with the native `spec.rbac` block, NOT `run.serviceAccountName`
+# + raw `spec.resources`. `rbac.serviceAccountName` is a real CRD field, so it
+# survives admission, and the operator both creates the SA/Role/RoleBinding AND runs
+# the pod as that SA. (A `run.serviceAccountName` written against an older CRD that
+# didn't declare it would be silently pruned, leaving the pod on the `default` SA
+# with no permissions.)
+apiVersion: kube-deploy.centerionware.app/v1alpha1
+kind: App
+metadata:
+  name: holyclaude
+  namespace: holyclaude
+spec:
+  build:
+    args: []
+    baseImage: node:20-alpine
+    branch: master
+    buildArgs:
+      VARIANT: full
+    buildCmd: npm run build
+    dockerfile: >
+      FROM node:26.2.0-bookworm-slim AS builder
+
+
+      LABEL org.opencontainers.image.source=https://github.com/CoderLuii/HolyClaude
+
+
+      ARG TARGETARCH
+
+      ARG VARIANT=full
+
+
+      ENV DEBIAN_FRONTEND=noninteractive
+
+
+      RUN apt-get update && apt-get install -y --no-install-recommends \
+          curl ca-certificates git build-essential pkg-config python3 \
+          && update-ca-certificates \
+          && rm -rf /var/lib/apt/lists/*
+
+      WORKDIR /workspace
+
+
+      RUN curl -fsSL https://claude.ai/install.sh | bash && \
+          install -m 0755 /root/.local/bin/claude /usr/local/bin/claude
+
+
+      RUN npm i -g \
+          typescript tsx pnpm vite esbuild eslint prettier \
+          serve nodemon concurrently dotenv-cli \
+          @google/gemini-cli @openai/codex task-master-ai \
+          @cloudcli-ai/cloudcli
+
+      RUN curl -fsSL https://cursor.com/install | bash && \
+          mkdir -p /usr/local/share/cursor-agent && \
+          cp -a /root/.local/share/cursor-agent/versions /usr/local/share/cursor-agent/versions && \
+          for b in agent cursor-agent; do \
+            if [ -e "/root/.local/bin/$b" ]; then \
+              tgt=$(readlink -f "/root/.local/bin/$b") && \
+              rel=$(echo "$tgt" | sed "s#/root/.local/share/cursor-agent#/usr/local/share/cursor-agent#") && \
+              ln -sf "$rel" "/usr/local/bin/$b"; \
+            fi; \
+          done
+
+
+      RUN mkdir -p /root/.claude-code-ui/plugins && \
+          git clone --depth 1 https://github.com/cloudcli-ai/cloudcli-plugin-terminal.git \
+            /root/.claude-code-ui/plugins/web-terminal && \
+          cd /root/.claude-code-ui/plugins/web-terminal && \
+          npm install && npm run build && \
+          git clone --depth 1 https://github.com/cloudcli-ai/cloudcli-plugin-starter.git \
+            /root/.claude-code-ui/plugins/project-stats && \
+          cd /root/.claude-code-ui/plugins/project-stats && \
+          npm install && npm run build && \
+          git clone --depth 1 https://github.com/grostim/cloudcli-cron.git \
+            /root/.claude-code-ui/plugins/cloudcli-plugin-workspace-scheduled-prompts && \
+          cd /root/.claude-code-ui/plugins/cloudcli-plugin-workspace-scheduled-prompts && \
+          npm install && npm run build && \
+          rm -rf /root/.claude-code-ui/plugins/*/.git && \
+          echo '{"project-stats":{"name":"project-stats","source":"https://github.com/cloudcli-ai/cloudcli-plugin-starter","enabled":true},"web-terminal":{"name":"web-terminal","source":"https://github.com/cloudcli-ai/cloudcli-plugin-terminal","enabled":true},"cloudcli-plugin-workspace-scheduled-prompts":{"name":"cloudcli-plugin-workspace-scheduled-prompts","source":"https://github.com/grostim/cloudcli-cron","enabled":true}}' \
+            > /root/.claude-code-ui/plugins.json
+
+
+      FROM node:26.2.0-bookworm-slim
+
+
+      LABEL org.opencontainers.image.source=https://github.com/CoderLuii/HolyClaude
+
+
+      ARG TARGETARCH
+
+      ARG VARIANT=full
+
+      ARG S6_OVERLAY_VERSION=3.2.3.0
+
+
+      ENV DEBIAN_FRONTEND=noninteractive \
+          LANG=en_US.UTF-8 \
+          LC_ALL=en_US.UTF-8
+
+
+      RUN apt-get update && apt-get install -y --no-install-recommends \
+          ca-certificates curl xz-utils \
+          git wget jq ripgrep fd-find unzip zip tree tmux fzf bat \
+          sqlite3 openssh-client locales strace lsof iproute2 procps htop sudo bubblewrap \
+          && update-ca-certificates \
+          && sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen \
+          && rm -rf /var/lib/apt/lists/*
+
+      RUN ln -sf /usr/bin/batcat /usr/local/bin/bat 2>/dev/null || true
+
+      RUN test -x /usr/bin/bwrap && chown root:root /usr/bin/bwrap && chmod 4755 /usr/bin/bwrap
+
+
+      RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+            | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 2>/dev/null && \
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+            > /etc/apt/sources.list.d/github-cli.list && \
+          apt-get update && apt-get install -y gh && rm -rf /var/lib/apt/lists/*
+
+      ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz /tmp/
+
+      RUN S6_ARCH=$(case "$TARGETARCH" in arm64) echo "aarch64";; *) echo "x86_64";; esac) && \
+          curl -fsSL -o /tmp/s6-overlay-arch.tar.xz \
+            "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" && \
+          tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz && \
+          tar -C / -Jxpf /tmp/s6-overlay-arch.tar.xz && \
+          rm /tmp/s6-overlay-*.tar.xz
+
+      RUN usermod -l claude -d /home/claude -m node && \
+          groupmod -n claude node && \
+          echo "claude ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/claude && \
+          chmod 0440 /etc/sudoers.d/claude
+
+
+      COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+
+      COPY --from=builder /usr/local/bin /usr/local/bin
+
+      COPY --from=builder /usr/local/share/cursor-agent /usr/local/share/cursor-agent
+
+      COPY --from=builder /root/.claude-code-ui /home/claude/.claude-code-ui
+
+
+      RUN echo "${VARIANT}" > /etc/holyclaude-variant
+
+
+      COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+
+      COPY scripts/bootstrap.sh /usr/local/bin/bootstrap.sh
+
+      COPY scripts/notify.py /usr/local/bin/notify.py
+
+      COPY scripts/persist-claude-json.mjs /usr/local/bin/persist-claude-json.mjs
+
+      COPY scripts/patch-cloudcli-apprise-notifications.mjs /usr/local/bin/patch-cloudcli-apprise-notifications.mjs
+
+      COPY scripts/patch-cloudcli-codex-complete-exit-code.mjs /usr/local/bin/patch-cloudcli-codex-complete-exit-code.mjs
+
+      COPY scripts/patch-cloudcli-codex-permissions.mjs /usr/local/bin/patch-cloudcli-codex-permissions.mjs
+
+      COPY scripts/patch-cloudcli-disable-self-update.mjs /usr/local/bin/patch-cloudcli-disable-self-update.mjs
+
+      COPY scripts/patch-cloudcli-web-terminal-rendering.mjs /usr/local/bin/patch-cloudcli-web-terminal-rendering.mjs
+
+      COPY config/settings.json /usr/local/share/holyclaude/settings.json
+
+      COPY config/claude-memory-full.md /usr/local/share/holyclaude/claude-memory-full.md
+
+      COPY config/claude-memory-slim.md /usr/local/share/holyclaude/claude-memory-slim.md
+
+
+      RUN chmod +x /usr/local/bin/entrypoint.sh \
+          /usr/local/bin/bootstrap.sh \
+          /usr/local/bin/notify.py \
+          /usr/local/bin/persist-claude-json.mjs \
+          /usr/local/bin/patch-cloudcli-apprise-notifications.mjs \
+          /usr/local/bin/patch-cloudcli-codex-complete-exit-code.mjs \
+          /usr/local/bin/patch-cloudcli-codex-permissions.mjs \
+          /usr/local/bin/patch-cloudcli-disable-self-update.mjs \
+          /usr/local/bin/patch-cloudcli-web-terminal-rendering.mjs
+
+
+      COPY s6-overlay/s6-rc.d/cloudcli/type /etc/s6-overlay/s6-rc.d/cloudcli/type
+
+      COPY s6-overlay/s6-rc.d/cloudcli/run /etc/s6-overlay/s6-rc.d/cloudcli/run
+
+      RUN chmod +x /etc/s6-overlay/s6-rc.d/cloudcli/run && \
+          mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d && \
+          touch /etc/s6-overlay/s6-rc.d/user/contents.d/cloudcli
+
+
+      RUN chown -R claude:claude /home/claude
+
+
+      WORKDIR /workspace
+
+
+      HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+        CMD curl -sf http://localhost:3001/ || exit 1
+
+      ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+    dockerfileMode: inline
+    installCmd: npm install --legacy-peer-deps
+    noCache: true
+    output: ''
+    registry: registry.registry.svc.cluster.local:5000
+    resources:
+      cloneCpuLimit: 500m
+      cloneCpuRequest: 100m
+      cloneMemoryLimit: 512Mi
+      cloneMemoryRequest: 128Mi
+      cpuLimit: '2'
+      cpuRequest: 250m
+      memoryLimit: 4Gi
+      memoryRequest: 512Mi
+  env:
+    NODE_OPTIONS: '--max-old-space-size=4096'
+    PGID: '1000'
+    PUID: '1000'
+    TZ: UTC
+  repo: https://github.com/CoderLuii/HolyClaude
+  run:
+    args: []
+    command: []
+    containerSecurityContext:
+      allowPrivilegeEscalation: true
+      capabilities:
+        add:
+          - SETFCAP
+      privileged: true
+      runAsUser: 0
+      runAsGroup: 0
+      seccompProfile:
+        type: Unconfined
+    enableServiceLinks: false
+    hostNetwork: false
+    port: 3001
+    registry: localhost:31999
+    replicas: 1
+    resources:
+      cpuLimit: '2'
+      cpuRequest: 100m
+      memoryLimit: 4Gi
+      memoryRequest: 512Mi
+    volumes:
+      - mountPath: /home/claude/.claude
+        name: claude-data
+        pvc:
+          claimName: claude-data
+          size: 1Gi
+          storageClass: local-path
+      - mountPath: /home/claude/.cloudcli
+        name: cloudcli-data
+        pvc:
+          claimName: cloudcli-data
+          size: 10Mi
+          storageClass: local-path
+      - mountPath: /workspace
+        name: workspace
+        pvc:
+          claimName: workspace
+          size: 1Gi
+          storageClass: local-path
+  service:
+    annotations:
+      netbird.io/expose: 'true'
+      netbird.io/groups: ai
+      netbird.io/policy: holyclaude
+      netbird.io/sourceGroups: ai
+    ports:
+      - name: ''
+        port: 80
+        protocol: TCP
+        targetPort: 3001
+    type: ClusterIP
+  updateInterval: 1m
+  # Native RBAC: creates the ServiceAccount + Role + RoleBinding and runs the pod
+  # as `holyclaude-tool-spawner`, granting it permission to manage pods in its own
+  # namespace. Replaces the previous `run.serviceAccountName` + raw `spec.resources`
+  # approach (which left the pod on the `default` SA because `run.serviceAccountName`
+  # was pruned by the CRD).
+  rbac:
+    serviceAccountName: holyclaude-tool-spawner
+    roles:
+      - name: holyclaude-tool-spawner
+        rules:
+          - apiGroups: [""]
+            resources: ["pods"]
+            verbs: ["create", "get", "list", "watch", "delete"]
+          - apiGroups: [""]
+            resources: ["pods/log"]
+            verbs: ["get"]
+          - apiGroups: [""]
+            resources: ["pods/exec"]
+            verbs: ["create"]

@@ -324,6 +324,35 @@ rbac:
 
 This creates: a ServiceAccount named livekit, a Role livekit-configmap-reader + RoleBinding, a ClusterRole kube-deploy-livekit-livekit-node-reader + ClusterRoleBinding, and binds the existing view ClusterRole — all cleaned up on deletion.
 
+By default the ServiceAccount is named after the App (override with `rbac.serviceAccountName`). The pod runs as this ServiceAccount automatically. To run the pod as a specific ServiceAccount, set `run.serviceAccountName` — it takes precedence over the `rbac` name.
+
+### Letting the app talk to the Kubernetes API (e.g. `kubectl`)
+
+A container has **no** access to the Kubernetes API beyond what its ServiceAccount is granted — installing `kubectl` in the image is not enough, it needs RBAC. To let an app create/manage pods in its own namespace, grant it a Role and run as the bound ServiceAccount:
+
+```yaml
+spec:
+  run:
+    serviceAccountName: my-app   # run as the SA the rbac block creates
+  rbac:
+    roles:
+      - name: my-app-pod-manager
+        rules:
+          - apiGroups: [""]
+            resources: ["pods"]
+            verbs: ["create", "get", "list", "watch", "delete"]
+          - apiGroups: [""]
+            resources: ["pods/log"]
+            verbs: ["get"]
+          - apiGroups: [""]
+            resources: ["pods/exec"]
+            verbs: ["create"]
+```
+
+You can also supply the ServiceAccount/Role/RoleBinding yourself as raw manifests under `spec.resources` and point `run.serviceAccountName` at them — both styles work.
+
+> **Ordering:** the operator creates the ServiceAccount, RBAC, PVCs, and any `spec.resources` **before** the Deployment, so the pod's ServiceAccount and its permissions exist by the time the pod is scheduled. (A pod that references a not-yet-created ServiceAccount is rejected by the ServiceAccount admission controller, and would otherwise come up missing the permissions it was meant to have.)
+
 ## Registry Authentication
 
 ### Push (build stage)

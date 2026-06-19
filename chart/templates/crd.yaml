@@ -166,6 +166,9 @@ spec:
                     replicas:
                       type: integer
                       default: 1
+                    serviceAccountName:
+                      type: string
+                      description: "ServiceAccount the pod runs as. Takes precedence over rbac.serviceAccountName. The SA (and any RBAC granting it) must exist or be created via spec.rbac/spec.resources."
                     registry:
                       type: string
                       default: "localhost:31999"
@@ -633,6 +636,9 @@ spec:
                     replicas:
                       type: integer
                       default: 1
+                    serviceAccountName:
+                      type: string
+                      description: "ServiceAccount the pod runs as. Takes precedence over rbac.serviceAccountName. The SA (and any RBAC granting it) must exist or be created via spec.rbac/spec.resources."
                     registry:
                       type: string
                       default: "localhost:31999"
