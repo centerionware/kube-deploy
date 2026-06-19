@@ -2,7 +2,7 @@
 
 # kube-deploy
 
-A lightweight Kubernetes operator that builds and deploys applications directly from git repositories — no Dockerfiles, no Helm charts, no manual image management required.
+A Kubernetes operator that builds and deploys an application from its git repository. It still uses a Dockerfile, a build, a registry, and a Deployment. You write an App manifest pointing at a repo. The Dockerfile is optional: use the one in the repo, write one inline in the manifest, or let the operator generate one. It then builds the image in-cluster with BuildKit, pushes it to a local registry, and creates the Deployment and Service.
 
 Think of it as a self-hosted Vercel or Cloudflare Workers, purpose-built for k3s clusters.
 
@@ -324,16 +324,24 @@ rbac:
 
 This creates: a ServiceAccount named livekit, a Role livekit-configmap-reader + RoleBinding, a ClusterRole kube-deploy-livekit-livekit-node-reader + ClusterRoleBinding, and binds the existing view ClusterRole — all cleaned up on deletion.
 
-By default the ServiceAccount is named after the App (override with `rbac.serviceAccountName`). The pod runs as this ServiceAccount automatically. To run the pod as a specific ServiceAccount, set `run.serviceAccountName` — it takes precedence over the `rbac` name.
+ServiceAccount name:
 
-### Letting the app talk to the Kubernetes API (e.g. `kubectl`)
+- Defaults to the App name.
+- `rbac.serviceAccountName` changes it.
+- `run.serviceAccountName` sets which ServiceAccount the pod runs as. It takes precedence over `rbac.serviceAccountName`.
 
-A container has **no** access to the Kubernetes API beyond what its ServiceAccount is granted — installing `kubectl` in the image is not enough, it needs RBAC. To let an app create/manage pods in its own namespace, grant it a Role and run as the bound ServiceAccount:
+The pod runs as this ServiceAccount.
+
+### Kubernetes API access (for `kubectl`)
+
+A container can only do what its ServiceAccount is allowed to do. Installing `kubectl` grants no access by itself. The ServiceAccount needs RBAC.
+
+To let an app manage pods in its own namespace, give it a Role and run it as the bound ServiceAccount:
 
 ```yaml
 spec:
   run:
-    serviceAccountName: my-app   # run as the SA the rbac block creates
+    serviceAccountName: my-app   # the SA the rbac block creates
   rbac:
     roles:
       - name: my-app-pod-manager
@@ -349,9 +357,9 @@ spec:
             verbs: ["create"]
 ```
 
-You can also supply the ServiceAccount/Role/RoleBinding yourself as raw manifests under `spec.resources` and point `run.serviceAccountName` at them — both styles work.
+Alternative: define the ServiceAccount, Role, and RoleBinding as raw manifests under `spec.resources`, and set `run.serviceAccountName` to that ServiceAccount.
 
-> **Ordering:** the operator creates the ServiceAccount, RBAC, PVCs, and any `spec.resources` **before** the Deployment, so the pod's ServiceAccount and its permissions exist by the time the pod is scheduled. (A pod that references a not-yet-created ServiceAccount is rejected by the ServiceAccount admission controller, and would otherwise come up missing the permissions it was meant to have.)
+Ordering: the operator creates the ServiceAccount, RBAC, PVCs, and `spec.resources` before the Deployment. The ServiceAccount must exist before the pod is scheduled. Otherwise Kubernetes rejects the pod.
 
 ## Registry Authentication
 
