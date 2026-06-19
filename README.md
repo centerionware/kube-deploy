@@ -2,7 +2,7 @@
 
 # kube-deploy
 
-A lightweight Kubernetes operator that builds and deploys applications directly from git repositories — no Dockerfiles, no Helm charts, no manual image management required.
+A Kubernetes operator that builds and deploys an application from its git repository. It still uses a Dockerfile, a build, a registry, and a Deployment. You write an App manifest pointing at a repo. The Dockerfile is optional: use the one in the repo, write one inline in the manifest, or let the operator generate one. It then builds the image in-cluster with BuildKit, pushes it to a local registry, and creates the Deployment and Service.
 
 Think of it as a self-hosted Vercel or Cloudflare Workers, purpose-built for k3s clusters.
 
