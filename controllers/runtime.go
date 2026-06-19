@@ -110,6 +110,24 @@ func EnsureRuntime(ctx context.Context, c client.Client, app *v1.App, image stri
 		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: s})
 	}
 
+	// Pod prerequisites must exist before the Deployment is created. A pod that
+	// references a ServiceAccount which doesn't exist yet is rejected by the
+	// ServiceAccount admission controller ("serviceaccount not found"), and even
+	// once it starts it would be missing the RoleBindings that grant it access —
+	// so the container comes up without the permissions it was meant to have
+	// (e.g. kubectl can't create pods). Create the ServiceAccount/RBAC, PVCs, and
+	// any raw resources the pod consumes first. These are best-effort: a failure
+	// here is logged but must not block the Deployment.
+	if err := EnsureRBAC(ctx, c, app); err != nil {
+		log.Error(err, "failed to ensure RBAC (non-fatal)")
+	}
+	if err := EnsureVolumes(ctx, c, app); err != nil {
+		log.Error(err, "failed to ensure volumes (non-fatal)")
+	}
+	if err := EnsureResources(ctx, c, app); err != nil {
+		log.Error(err, "failed to apply generic resources (non-fatal)")
+	}
+
 	log.Info("upserting deployment", "image", image, "port", port, "replicas", replicas)
 	deploy := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -168,6 +186,7 @@ func EnsureRuntime(ctx context.Context, c client.Client, app *v1.App, image stri
 
 	// Deployment and service are fatal — app can't run without them.
 	// Everything below is best-effort — failures are logged but don't block deployment.
+	// (RBAC, volumes, and generic resources are ensured above, before the Deployment.)
 
 	if err := EnsureIngress(ctx, c, app, port); err != nil {
 		log.Error(err, "failed to reconcile ingress (non-fatal)")
@@ -175,17 +194,8 @@ func EnsureRuntime(ctx context.Context, c client.Client, app *v1.App, image stri
 	if err := EnsureGateway(ctx, c, app, port); err != nil {
 		log.Error(err, "failed to reconcile HTTPRoute (non-fatal)")
 	}
-	if err := EnsureRBAC(ctx, c, app); err != nil {
-		log.Error(err, "failed to ensure RBAC (non-fatal)")
-	}
-	if err := EnsureVolumes(ctx, c, app); err != nil {
-		log.Error(err, "failed to ensure volumes (non-fatal)")
-	}
 	if err := EnsureHPA(ctx, c, app); err != nil {
 		log.Error(err, "failed to ensure HPA (non-fatal)")
-	}
-	if err := EnsureResources(ctx, c, app); err != nil {
-		log.Error(err, "failed to apply generic resources (non-fatal)")
 	}
 
 	return nil
