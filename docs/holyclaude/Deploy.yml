@@ -1,13 +1,11 @@
 # HolyClaude (full variant) deployed via kube-deploy.
 #
-# RBAC note: the pod must run as a ServiceAccount that is allowed to manage pods
-# (so the in-container tooling — kubectl, CloudCLI tool-spawner, etc. — can launch
-# pods). This is done with the native `spec.rbac` block, NOT `run.serviceAccountName`
-# + raw `spec.resources`. `rbac.serviceAccountName` is a real CRD field, so it
-# survives admission, and the operator both creates the SA/Role/RoleBinding AND runs
-# the pod as that SA. (A `run.serviceAccountName` written against an older CRD that
-# didn't declare it would be silently pruned, leaving the pod on the `default` SA
-# with no permissions.)
+# kubectl is installed into the final image (see the `kubectl` RUN step in the
+# Dockerfile below). Installing the binary is not enough on its own: the pod
+# also needs a ServiceAccount with RBAC granting it API access, which is what
+# `spec.rbac` below does (full access within the `holyclaude` namespace, i.e.
+# namespace-admin, not cluster-admin). See the comment on `spec.rbac` for why
+# this uses `rbac.serviceAccountName` and not `run.serviceAccountName`.
 apiVersion: kube-deploy.centerionware.app/v1alpha1
 kind: App
 metadata:
@@ -120,6 +118,10 @@ spec:
           echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
             > /etc/apt/sources.list.d/github-cli.list && \
           apt-get update && apt-get install -y gh && rm -rf /var/lib/apt/lists/*
+
+      RUN curl -fsSL -o /usr/local/bin/kubectl \
+            "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/${TARGETARCH}/kubectl" && \
+          chmod +x /usr/local/bin/kubectl
 
       ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz /tmp/
 
@@ -279,21 +281,20 @@ spec:
     type: ClusterIP
   updateInterval: 1m
   # Native RBAC: creates the ServiceAccount + Role + RoleBinding and runs the pod
-  # as `holyclaude-tool-spawner`, granting it permission to manage pods in its own
-  # namespace. Replaces the previous `run.serviceAccountName` + raw `spec.resources`
-  # approach (which left the pod on the `default` SA because `run.serviceAccountName`
-  # was pruned by the CRD).
+  # as `holyclaude-tool-spawner`, granting it full access (all API groups, all
+  # resources, all verbs) within the holyclaude namespace only -- namespace-admin,
+  # not cluster-admin. Uses `rbac.serviceAccountName`, not `run.serviceAccountName`:
+  # the latter is a real field on RunSpec in the Go types, but was never declared
+  # in the CRD schema, so the API server silently drops it on admission. A pod
+  # that references a ServiceAccount that doesn't exist is rejected outright, so
+  # setting only `run.serviceAccountName` (with no matching `rbac` block, as this
+  # App previously did) leaves the pod on the `default` ServiceAccount with none
+  # of the intended permissions.
   rbac:
     serviceAccountName: holyclaude-tool-spawner
     roles:
-      - name: holyclaude-tool-spawner
+      - name: holyclaude-namespace-admin
         rules:
-          - apiGroups: [""]
-            resources: ["pods"]
-            verbs: ["create", "get", "list", "watch", "delete"]
-          - apiGroups: [""]
-            resources: ["pods/log"]
-            verbs: ["get"]
-          - apiGroups: [""]
-            resources: ["pods/exec"]
-            verbs: ["create"]
+          - apiGroups: ["*"]
+            resources: ["*"]
+            verbs: ["*"]
